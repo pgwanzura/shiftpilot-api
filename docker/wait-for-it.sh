@@ -36,7 +36,7 @@ wait_for()
             nc -z $WAITFORIT_HOST $WAITFORIT_PORT
             WAITFORIT_result=$?
         else
-            (echo -n > /dev/tcp/$WAITFORIT_HOST/$WAITFORIT_PORT) >/dev/null 2>&1
+            (echo > /dev/tcp/$WAITFORIT_HOST/$WAITFORIT_PORT) >/dev/null 2>&1
             WAITFORIT_result=$?
         fi
         if [[ $WAITFORIT_result -eq 0 ]]; then
@@ -148,13 +148,10 @@ WAITFORIT_TIMEOUT_PATH=$(realpath $WAITFORIT_TIMEOUT_PATH 2>/dev/null || readlin
 WAITFORIT_BUSYTIMEFLAG=""
 if [[ $WAITFORIT_TIMEOUT_PATH =~ "busybox" ]]; then
     WAITFORIT_ISBUSY=1
-    # Check if busybox timeout uses -t flag
-    # (recent Alpine versions don't support -t anymore)
-    if timeout &>/dev/stdout | grep -q -e '-t '; then
-        WAITFORIT_BUSYTIMEFLAG="-t"
-    fi
+    WAITFORIT_BUSYTIMEFLAG="-t"
 else
     WAITFORIT_ISBUSY=0
+    WAITFORIT_BUSYTIMEFLAG=""
 fi
 
 if [[ $WAITFORIT_CHILD -gt 0 ]]; then

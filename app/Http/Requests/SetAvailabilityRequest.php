@@ -1,14 +1,15 @@
 <?php
 
-namespace App\Http\Requests\Employee;
+namespace App\Http\Requests;
 
+use \App\Models\EmployeeAvailability;
 use Illuminate\Foundation\Http\FormRequest;
 
 class SetAvailabilityRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->can('create', \App\Models\EmployeeAvailability::class);
+        return $this->user()->can('create', EmployeeAvailability::class);
     }
 
     public function rules(): array

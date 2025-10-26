@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\DayOfWeek;
+use App\Enums\RecurrenceType;
+use App\Enums\ShiftTemplateStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -35,6 +38,9 @@ class ShiftTemplate extends Model
         'start_date' => 'date',
         'end_date' => 'date',
         'meta' => 'array',
+        'day_of_week' => DayOfWeek::class,
+        'recurrence_type' => RecurrenceType::class,
+        'status' => ShiftTemplateStatus::class,
     ];
 
     public function employer()
@@ -55,5 +61,17 @@ class ShiftTemplate extends Model
     public function createdBy()
     {
         return $this->morphTo();
+    }
+
+    public function isActive(): bool
+    {
+        return $this->status === ShiftTemplateStatus::ACTIVE;
+    }
+
+    public function getDurationAttribute(): string
+    {
+        $start = \Carbon\Carbon::parse($this->start_time);
+        $end = \Carbon\Carbon::parse($this->end_time);
+        return $start->diff($end)->format('%H:%I');
     }
 }

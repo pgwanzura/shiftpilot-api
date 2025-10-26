@@ -1,14 +1,15 @@
 <?php
 
-namespace App\Http\Requests\Subscription;
+namespace App\Http\Requests;
 
+use \App\Models\Subscription;
 use Illuminate\Foundation\Http\FormRequest;
 
 class CreateSubscriptionRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->can('create', \App\Models\Subscription::class);
+        return $this->user()->can('create', Subscription::class);
     }
 
     public function rules(): array

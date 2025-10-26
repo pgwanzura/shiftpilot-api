@@ -1,14 +1,15 @@
 <?php
 
-namespace App\Http\Requests\Agency;
+namespace App\Http\Requests;
 
+use \App\Models\Agent;
 use Illuminate\Foundation\Http\FormRequest;
 
 class CreateAgentRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->can('create', \App\Models\Agent::class);
+        return $this->user()->can('create', Agent::class);
     }
 
     public function rules(): array

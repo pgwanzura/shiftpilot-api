@@ -1,14 +1,15 @@
 <?php
 
-namespace App\Http\Requests\ShiftOffer;
+namespace App\Http\Requests;
 
+use \App\Models\ShiftOffer;
 use Illuminate\Foundation\Http\FormRequest;
 
 class CreateShiftOfferRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->can('create', \App\Models\ShiftOffer::class);
+        return $this->user()->can('create', ShiftOffer::class);
     }
 
     public function rules(): array

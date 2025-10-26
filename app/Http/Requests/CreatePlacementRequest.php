@@ -1,14 +1,15 @@
 <?php
 
-namespace App\Http\Requests\Agency;
+namespace App\Http\Requests;
 
+use \App\Models\Placement;
 use Illuminate\Foundation\Http\FormRequest;
 
 class CreatePlacementRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->can('create', \App\Models\Placement::class);
+        return $this->user()->can('create', Placement::class);
     }
 
     public function rules(): array

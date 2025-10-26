@@ -12,7 +12,6 @@ class ShiftOfferRequest extends FormRequest
             return $this->user()->isAgencyAdmin() || $this->user()->isAgent() || $this->user()->isSuperAdmin();
         }
 
-        // For updates (accepting/rejecting offers)
         return $this->user()->isEmployee() || $this->user()->isAgencyAdmin() || $this->user()->isSuperAdmin();
     }
 
@@ -28,7 +27,6 @@ class ShiftOfferRequest extends FormRequest
         ];
 
         if ($this->isMethod('PATCH') || $this->isMethod('PUT')) {
-            // Only allow status and response_notes updates
             return [
                 'status' => 'required|in:accepted,rejected',
                 'response_notes' => 'nullable|string',
