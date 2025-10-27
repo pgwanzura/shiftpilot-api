@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Carbon\Carbon;
 
 class ShiftPilotSeeder extends Seeder
@@ -59,8 +60,8 @@ class ShiftPilotSeeder extends Seeder
             'phone' => '+441234567890',
             'status' => 'active',
             'email_verified_at' => $now,
-            'last_login_at' => $now->subDays(2),
-            'created_at' => $now->subMonths(6),
+            'last_login_at' => $now->copy()->subDays(2),
+            'created_at' => $now->copy()->subMonths(6),
             'updated_at' => $now,
         ];
 
@@ -74,8 +75,8 @@ class ShiftPilotSeeder extends Seeder
                 'phone' => '+4412345678' . $i,
                 'status' => 'active',
                 'email_verified_at' => $now,
-                'last_login_at' => $now->subDays(rand(1, 7)),
-                'created_at' => $now->subMonths(rand(3, 6)),
+                'last_login_at' => $now->copy()->subDays(rand(1, 7)),
+                'created_at' => $now->copy()->subMonths(rand(3, 6)),
                 'updated_at' => $now,
             ];
         }
@@ -90,8 +91,8 @@ class ShiftPilotSeeder extends Seeder
                 'phone' => '+4412345678' . (50 + $i),
                 'status' => 'active',
                 'email_verified_at' => $now,
-                'last_login_at' => $now->subDays(rand(1, 14)),
-                'created_at' => $now->subMonths(rand(1, 5)),
+                'last_login_at' => $now->copy()->subDays(rand(1, 14)),
+                'created_at' => $now->copy()->subMonths(rand(1, 5)),
                 'updated_at' => $now,
             ];
         }
@@ -106,8 +107,8 @@ class ShiftPilotSeeder extends Seeder
                 'phone' => '+4412345678' . (100 + $i),
                 'status' => 'active',
                 'email_verified_at' => $now,
-                'last_login_at' => $now->subDays(rand(1, 10)),
-                'created_at' => $now->subMonths(rand(2, 6)),
+                'last_login_at' => $now->copy()->subDays(rand(1, 10)),
+                'created_at' => $now->copy()->subMonths(rand(2, 6)),
                 'updated_at' => $now,
             ];
         }
@@ -122,8 +123,8 @@ class ShiftPilotSeeder extends Seeder
                 'phone' => '+4412345678' . (200 + $i),
                 'status' => 'active',
                 'email_verified_at' => $now,
-                'last_login_at' => $now->subDays(rand(5, 30)),
-                'created_at' => $now->subMonths(rand(1, 4)),
+                'last_login_at' => $now->copy()->subDays(rand(5, 30)),
+                'created_at' => $now->copy()->subMonths(rand(1, 4)),
                 'updated_at' => $now,
             ];
         }
@@ -138,8 +139,8 @@ class ShiftPilotSeeder extends Seeder
                 'phone' => '+4412345678' . (300 + $i),
                 'status' => rand(0, 10) > 1 ? 'active' : 'inactive', // 90% active
                 'email_verified_at' => $now,
-                'last_login_at' => $now->subDays(rand(1, 60)),
-                'created_at' => $now->subMonths(rand(1, 12)),
+                'last_login_at' => $now->copy()->subDays(rand(1, 60)),
+                'created_at' => $now->copy()->subMonths(rand(1, 12)),
                 'updated_at' => $now,
             ];
         }
@@ -174,7 +175,7 @@ class ShiftPilotSeeder extends Seeder
                 'commission_rate' => rand(8, 15) + (rand(0, 99) / 100),
                 'subscription_status' => 'active',
                 'meta' => json_encode(['business_hours' => ['start' => '09:00', 'end' => '17:00']]),
-                'created_at' => $now->subMonths(rand(6, 12)),
+                'created_at' => $now->copy()->subMonths(rand(6, 12)),
                 'updated_at' => $now,
             ];
         }
@@ -209,7 +210,7 @@ class ShiftPilotSeeder extends Seeder
                 'country' => 'GB',
                 'subscription_status' => 'active',
                 'meta' => json_encode(['industry' => $this->getIndustry($i)]),
-                'created_at' => $now->subMonths(rand(4, 10)),
+                'created_at' => $now->copy()->subMonths(rand(4, 10)),
                 'updated_at' => $now,
             ];
         }
@@ -254,10 +255,10 @@ class ShiftPilotSeeder extends Seeder
                 'employer_id' => $rel[0],
                 'agency_id' => $rel[1],
                 'status' => $rel[2],
-                'contract_start' => $now->subMonths(rand(3, 8)),
-                'contract_end' => $now->addMonths(rand(6, 24)),
+                'contract_start' => $now->copy()->subMonths(rand(3, 8))->format('Y-m-d'),
+                'contract_end' => $now->copy()->addMonths(rand(6, 24))->format('Y-m-d'),
                 'terms' => 'Standard service agreement for temporary staffing',
-                'created_at' => $now->subMonths(rand(4, 9)),
+                'created_at' => $now->copy()->subMonths(rand(4, 9)),
                 'updated_at' => $now,
             ];
         }
@@ -280,7 +281,7 @@ class ShiftPilotSeeder extends Seeder
                 'email' => "agent$i@example.com",
                 'phone' => '+4412345678' . (400 + $i),
                 'permissions' => json_encode(['shift_management', 'employee_view', 'timesheet_approval']),
-                'created_at' => $now->subMonths(rand(1, 5)),
+                'created_at' => $now->copy()->subMonths(rand(1, 5)),
                 'updated_at' => $now,
             ];
         }
@@ -308,7 +309,7 @@ class ShiftPilotSeeder extends Seeder
                     'role' => $j === 1 ? 'manager' : ($j === 2 ? 'approver' : 'supervisor'),
                     'can_sign_timesheets' => $j !== 3, // Supervisor cannot sign
                     'meta' => json_encode(['department' => $this->getDepartment($j)]),
-                    'created_at' => $now->subMonths(rand(2, 6)),
+                    'created_at' => $now->copy()->subMonths(rand(2, 6)),
                     'updated_at' => $now,
                 ];
             }
@@ -340,7 +341,7 @@ class ShiftPilotSeeder extends Seeder
                     'latitude' => 51.5074 + (rand(-500, 500) / 10000),
                     'longitude' => -0.1278 + (rand(-500, 500) / 10000),
                     'meta' => json_encode(['facilities' => ['parking', 'canteen']]),
-                    'created_at' => $now->subMonths(rand(3, 8)),
+                    'created_at' => $now->copy()->subMonths(rand(3, 8)),
                     'updated_at' => $now,
                 ];
             }
@@ -374,7 +375,7 @@ class ShiftPilotSeeder extends Seeder
                 'employment_type' => $employmentTypes[array_rand($employmentTypes)],
                 'status' => rand(0, 10) > 1 ? 'active' : 'inactive',
                 'meta' => json_encode(['emergency_contact' => "Contact $i"]),
-                'created_at' => $now->subMonths(rand(1, 12)),
+                'created_at' => $now->copy()->subMonths(rand(1, 12)),
                 'updated_at' => $now,
             ];
         }
@@ -413,13 +414,13 @@ class ShiftPilotSeeder extends Seeder
                 'employee_id' => $employeeId,
                 'employer_id' => $employerId,
                 'agency_id' => $agencyId,
-                'start_date' => $now->subMonths(rand(1, 6)),
-                'end_date' => rand(0, 10) > 3 ? $now->addMonths(rand(1, 12)) : null, // 70% have end date
+                'start_date' => $now->copy()->subMonths(rand(1, 6))->format('Y-m-d'),
+                'end_date' => rand(0, 10) > 3 ? $now->copy()->addMonths(rand(1, 12))->format('Y-m-d') : null, // 70% have end date
                 'status' => $this->getPlacementStatus(),
                 'employee_rate' => rand(10, 20) + (rand(0, 99) / 100),
                 'client_rate' => rand(15, 30) + (rand(0, 99) / 100),
                 'notes' => 'Placement agreement for temporary work',
-                'created_at' => $now->subMonths(rand(2, 7)),
+                'created_at' => $now->copy()->subMonths(rand(2, 7)),
                 'updated_at' => $now,
             ];
         }
@@ -452,8 +453,8 @@ class ShiftPilotSeeder extends Seeder
                     'employee_id' => $employeeId,
                     'type' => $type,
                     'day_of_week' => $dayOfWeek,
-                    'start_date' => $type === 'one_time' ? $now->addDays(rand(1, 30)) : null,
-                    'end_date' => $type === 'one_time' ? $now->addDays(rand(31, 60)) : null,
+                    'start_date' => $type === 'one_time' ? $now->copy()->addDays(rand(1, 30))->format('Y-m-d') : null,
+                    'end_date' => $type === 'one_time' ? $now->copy()->addDays(rand(31, 60))->format('Y-m-d') : null,
                     'start_time' => $this->generateTime(6, 10), // Morning start
                     'end_time' => $this->generateTime(14, 18), // Afternoon/evening end
                     'timezone' => 'Europe/London',
@@ -461,7 +462,8 @@ class ShiftPilotSeeder extends Seeder
                     'priority' => rand(1, 10),
                     'max_shift_length_hours' => rand(6, 12),
                     'min_shift_length_hours' => rand(2, 4),
-                    'created_at' => $now->subMonths(rand(1, 3)),
+                    'notes' => 'Availability preference',
+                    'created_at' => $now->copy()->subMonths(rand(1, 3)),
                     'updated_at' => $now,
                 ];
             }
@@ -494,13 +496,13 @@ class ShiftPilotSeeder extends Seeder
             $requests[] = [
                 'employee_id' => $employeeId,
                 'type' => $type,
-                'start_date' => $startDate,
-                'end_date' => $endDate,
+                'start_date' => $startDate->format('Y-m-d'),
+                'end_date' => $endDate->format('Y-m-d'),
                 'status' => $this->getTimeOffStatus(),
                 'reason' => "Time off request for $type",
                 'approved_by_id' => rand(0, 10) > 3 ? rand(2, 6) : null, // 70% approved
-                'approved_at' => rand(0, 10) > 3 ? $now->subDays(rand(1, 10)) : null,
-                'created_at' => $now->subDays(rand(5, 20)),
+                'approved_at' => rand(0, 10) > 3 ? $now->copy()->subDays(rand(1, 10)) : null,
+                'created_at' => $now->copy()->subDays(rand(5, 20)),
                 'updated_at' => $now,
             ];
         }
@@ -544,7 +546,7 @@ class ShiftPilotSeeder extends Seeder
                     'status' => 'active',
                     'created_by_type' => 'employer',
                     'created_by_id' => $employerId + 9, // Employer admin user_id
-                    'created_at' => $now->subMonths(rand(2, 6)),
+                    'created_at' => $now->copy()->subMonths(rand(2, 6)),
                     'updated_at' => $now,
                 ];
             }
@@ -559,8 +561,8 @@ class ShiftPilotSeeder extends Seeder
         $shifts = [];
         $now = Carbon::now();
 
-        // Create 500 shifts over the past 3 months and future
-        for ($i = 1; $i <= 500; $i++) {
+        // Create 200 shifts over the past 3 months and future (reduced from 500 for performance)
+        for ($i = 1; $i <= 200; $i++) {
             $employerId = rand(1, 8);
             $agencyId = rand(1, 5);
             $locationId = DB::table('locations')
@@ -594,6 +596,7 @@ class ShiftPilotSeeder extends Seeder
                 'created_by_type' => rand(0, 1) ? 'employer' : 'agency',
                 'created_by_id' => rand(0, 1) ? $employerId + 9 : rand(20, 34),
                 'meta' => json_encode(['notes' => 'Regular shift']),
+                'notes' => 'Scheduled shift',
                 'created_at' => $startTime->copy()->subDays(rand(1, 7)),
                 'updated_at' => $now,
             ];
@@ -622,6 +625,7 @@ class ShiftPilotSeeder extends Seeder
         // Create offers for open shifts
         $openShifts = DB::table('shifts')
             ->whereIn('status', ['open', 'offered'])
+            ->limit(50) // Limit to 50 shifts to avoid too many offers
             ->get();
 
         foreach ($openShifts as $shift) {
@@ -634,9 +638,10 @@ class ShiftPilotSeeder extends Seeder
                     'employee_id' => $employeeId,
                     'offered_by_id' => rand(20, 34), // Agent user_id
                     'status' => $this->getOfferStatus(),
-                    'expires_at' => $now->addHours(rand(24, 72)),
-                    'responded_at' => rand(0, 10) > 5 ? $now->subHours(rand(1, 12)) : null,
-                    'created_at' => $now->subHours(rand(1, 24)),
+                    'expires_at' => $now->copy()->addHours(rand(24, 72)),
+                    'responded_at' => rand(0, 10) > 5 ? $now->copy()->subHours(rand(1, 12)) : null,
+                    'response_notes' => 'Shift offer response',
+                    'created_at' => $now->copy()->subHours(rand(1, 24)),
                     'updated_at' => $now,
                 ];
             }
@@ -678,9 +683,10 @@ class ShiftPilotSeeder extends Seeder
                 'hours_worked' => round($hoursWorked, 2),
                 'status' => $this->getTimesheetStatus($shift->status),
                 'agency_approved_by' => in_array($shift->status, ['agency_approved', 'employer_approved', 'billed']) ? rand(2, 6) : null,
-                'agency_approved_at' => in_array($shift->status, ['agency_approved', 'employer_approved', 'billed']) ? $clockOut->addHours(rand(1, 24)) : null,
+                'agency_approved_at' => in_array($shift->status, ['agency_approved', 'employer_approved', 'billed']) ? $clockOut->copy()->addHours(rand(1, 24)) : null,
                 'approved_by_contact_id' => in_array($shift->status, ['employer_approved', 'billed']) ? rand(1, 20) : null,
-                'approved_at' => in_array($shift->status, ['employer_approved', 'billed']) ? $clockOut->addHours(rand(25, 48)) : null,
+                'approved_at' => in_array($shift->status, ['employer_approved', 'billed']) ? $clockOut->copy()->addHours(rand(25, 48)) : null,
+                'notes' => 'Timesheet entry',
                 'created_at' => $clockOut,
                 'updated_at' => $now,
             ];
@@ -718,9 +724,9 @@ class ShiftPilotSeeder extends Seeder
                 'shift_id' => $shift->id,
                 'contact_id' => $contactId,
                 'status' => 'approved',
-                'signed_at' => Carbon::parse($shift->start_time)->addHours(rand(24, 72)),
+                'signed_at' => Carbon::parse($shift->start_time)->copy()->addHours(rand(24, 72)),
                 'notes' => 'Shift completed satisfactorily',
-                'created_at' => Carbon::parse($shift->start_time)->addHours(rand(24, 48)),
+                'created_at' => Carbon::parse($shift->start_time)->copy()->addHours(rand(24, 48)),
                 'updated_at' => $now,
             ];
         }
@@ -734,8 +740,8 @@ class ShiftPilotSeeder extends Seeder
         $invoices = [];
         $now = Carbon::now();
 
-        // Create 200 invoices of various types
-        for ($i = 1; $i <= 200; $i++) {
+        // Create 100 invoices of various types (reduced from 200)
+        for ($i = 1; $i <= 100; $i++) {
             $type = ['employer_to_agency', 'agency_to_shiftpilot', 'employer_to_shiftpilot'][array_rand([0, 1, 2])];
 
             list($fromType, $fromId, $toType, $toId) = $this->getInvoiceParties($type);
@@ -756,9 +762,11 @@ class ShiftPilotSeeder extends Seeder
                 'tax_amount' => $taxAmount,
                 'total_amount' => $totalAmount,
                 'status' => $this->getInvoiceStatus(),
-                'due_date' => $now->copy()->addDays(rand(7, 30)),
-                'paid_at' => rand(0, 10) > 4 ? $now->subDays(rand(1, 14)) : null,
-                'created_at' => $now->subDays(rand(15, 60)),
+                'due_date' => $now->copy()->addDays(rand(7, 30))->format('Y-m-d'),
+                'paid_at' => rand(0, 10) > 4 ? $now->copy()->subDays(rand(1, 14)) : null,
+                'payment_reference' => rand(0, 10) > 4 ? 'PAY-' . Str::random(10) : null,
+                'metadata' => json_encode(['invoice_type' => $type]),
+                'created_at' => $now->copy()->subDays(rand(15, 60)),
                 'updated_at' => $now,
             ];
         }
@@ -785,7 +793,7 @@ class ShiftPilotSeeder extends Seeder
     {
         return [
             [
-                'description' => 'Temporary staffing services for October 2024',
+                'description' => 'Temporary staffing services for ' . date('F Y'),
                 'quantity' => 1,
                 'unit_price' => $subtotal,
                 'tax_rate' => 20.00,
@@ -818,7 +826,7 @@ class ShiftPilotSeeder extends Seeder
                 'payer_id' => $invoice->from_id,
                 'amount' => $invoice->total_amount,
                 'method' => ['stripe', 'bacs', 'sepa'][array_rand([0, 1, 2])],
-                'processor_id' => 'pay_' . str_random(14),
+                'processor_id' => 'pay_' . Str::random(14),
                 'status' => 'completed',
                 'fee_amount' => $invoice->total_amount * 0.029 + 0.30, // 2.9% + £0.30
                 'net_amount' => $invoice->total_amount - ($invoice->total_amount * 0.029 + 0.30),
@@ -838,7 +846,7 @@ class ShiftPilotSeeder extends Seeder
         $now = Carbon::now();
 
         // Create payroll records for employees
-        for ($i = 1; $i <= 300; $i++) {
+        for ($i = 1; $i <= 200; $i++) { // Reduced from 300
             $employeeId = rand(1, 100);
             $agencyId = DB::table('employees')->where('id', $employeeId)->value('agency_id');
 
@@ -854,14 +862,15 @@ class ShiftPilotSeeder extends Seeder
             $payrolls[] = [
                 'agency_id' => $agencyId,
                 'employee_id' => $employeeId,
-                'period_start' => $periodStart,
-                'period_end' => $periodEnd,
+                'period_start' => $periodStart->format('Y-m-d'),
+                'period_end' => $periodEnd->format('Y-m-d'),
                 'total_hours' => $totalHours,
                 'gross_pay' => $grossPay,
                 'taxes' => $taxes,
                 'net_pay' => $netPay,
                 'status' => rand(0, 10) > 2 ? 'paid' : 'unpaid',
-                'paid_at' => rand(0, 10) > 2 ? $periodEnd->addDays(rand(5, 10)) : null,
+                'paid_at' => rand(0, 10) > 2 ? $periodEnd->copy()->addDays(rand(5, 10)) : null,
+                'payout_id' => null, // Will be set when creating payouts
                 'created_at' => $periodEnd,
                 'updated_at' => $now,
             ];
@@ -884,12 +893,13 @@ class ShiftPilotSeeder extends Seeder
 
                 $payouts[] = [
                     'agency_id' => $agencyId,
-                    'period_start' => $periodStart,
-                    'period_end' => $periodEnd,
+                    'period_start' => $periodStart->format('Y-m-d'),
+                    'period_end' => $periodEnd->format('Y-m-d'),
                     'total_amount' => rand(5000, 50000) + (rand(0, 99) / 100),
                     'status' => 'paid',
-                    'provider_payout_id' => 'po_' . str_random(14),
-                    'created_at' => $periodEnd->addDays(rand(3, 7)),
+                    'provider_payout_id' => 'po_' . Str::random(14),
+                    'metadata' => json_encode(['period' => $periodStart->format('F Y')]),
+                    'created_at' => $periodEnd->copy()->addDays(rand(3, 7)),
                     'updated_at' => $now,
                 ];
             }
@@ -921,10 +931,11 @@ class ShiftPilotSeeder extends Seeder
                 'amount' => $plans[$plan]['amount'],
                 'interval' => 'monthly',
                 'status' => 'active',
-                'started_at' => $now->subMonths(rand(3, 12)),
+                'started_at' => $now->copy()->subMonths(rand(3, 12)),
                 'current_period_start' => $now->copy()->startOfMonth(),
                 'current_period_end' => $now->copy()->addMonth()->startOfMonth(),
-                'created_at' => $now->subMonths(rand(3, 12)),
+                'meta' => json_encode(['billing_cycle' => 'monthly']),
+                'created_at' => $now->copy()->subMonths(rand(3, 12)),
                 'updated_at' => $now,
             ];
         }
@@ -940,10 +951,11 @@ class ShiftPilotSeeder extends Seeder
                 'amount' => $plans[$plan]['amount'],
                 'interval' => 'monthly',
                 'status' => 'active',
-                'started_at' => $now->subMonths(rand(2, 8)),
+                'started_at' => $now->copy()->subMonths(rand(2, 8)),
                 'current_period_start' => $now->copy()->startOfMonth(),
                 'current_period_end' => $now->copy()->addMonth()->startOfMonth(),
-                'created_at' => $now->subMonths(rand(2, 8)),
+                'meta' => json_encode(['billing_cycle' => 'monthly']),
+                'created_at' => $now->copy()->subMonths(rand(2, 8)),
                 'updated_at' => $now,
             ];
         }
@@ -993,9 +1005,9 @@ class ShiftPilotSeeder extends Seeder
                 'end_time' => rand(0, 10) > 5 ? $this->generateTime(14, 18) : null,
                 'rate' => rand(12, 35) + (rand(0, 99) / 100),
                 'currency' => 'GBP',
-                'effective_from' => $now->subMonths(rand(1, 6)),
-                'effective_to' => $now->addMonths(rand(6, 24)),
-                'created_at' => $now->subMonths(rand(2, 7)),
+                'effective_from' => $now->copy()->subMonths(rand(1, 6))->format('Y-m-d'),
+                'effective_to' => $now->copy()->addMonths(rand(6, 24))->format('Y-m-d'),
+                'created_at' => $now->copy()->subMonths(rand(2, 7)),
                 'updated_at' => $now,
             ];
         }
@@ -1017,8 +1029,8 @@ class ShiftPilotSeeder extends Seeder
             'shift_offer.sent:employee'
         ];
 
-        // Create 1000 notifications
-        for ($i = 1; $i <= 1000; $i++) {
+        // Create 200 notifications (reduced from 1000)
+        for ($i = 1; $i <= 200; $i++) {
             $recipientType = ['user', 'agency', 'employer'][array_rand([0, 1, 2])];
             $recipientId = $recipientType === 'user' ? rand(2, 161) : ($recipientType === 'agency' ? rand(1, 5) : rand(1, 8));
 
@@ -1029,8 +1041,8 @@ class ShiftPilotSeeder extends Seeder
                 'template_key' => $templates[array_rand($templates)],
                 'payload' => json_encode(['message' => 'Notification message']),
                 'is_read' => rand(0, 10) > 3,
-                'sent_at' => $now->subHours(rand(1, 720)),
-                'created_at' => $now->subHours(rand(1, 720)),
+                'sent_at' => $now->copy()->subHours(rand(1, 720)),
+                'created_at' => $now->copy()->subHours(rand(1, 720)),
                 'updated_at' => $now,
             ];
         }
@@ -1054,10 +1066,10 @@ class ShiftPilotSeeder extends Seeder
                 'owner_id' => $ownerId,
                 'url' => "https://webhook.example.com/$ownerType/$ownerId",
                 'events' => json_encode(['shift.assigned', 'timesheet.approved', 'invoice.paid']),
-                'secret' => str_random(32),
+                'secret' => Str::random(32),
                 'status' => 'active',
-                'last_delivery_at' => $now->subHours(rand(1, 168)),
-                'created_at' => $now->subMonths(rand(1, 4)),
+                'last_delivery_at' => $now->copy()->subHours(rand(1, 168)),
+                'created_at' => $now->copy()->subMonths(rand(1, 4)),
                 'updated_at' => $now,
             ];
         }
@@ -1072,8 +1084,8 @@ class ShiftPilotSeeder extends Seeder
         $now = Carbon::now();
         $actions = ['created', 'updated', 'deleted', 'viewed', 'approved', 'rejected'];
 
-        // Create 2000 audit log entries
-        for ($i = 1; $i <= 2000; $i++) {
+        // Create 500 audit log entries (reduced from 2000)
+        for ($i = 1; $i <= 500; $i++) {
             $actorType = 'user';
             $actorId = rand(2, 161);
             $targetType = ['shift', 'timesheet', 'invoice', 'employee', 'employer'][array_rand([0, 1, 2, 3, 4])];
@@ -1088,21 +1100,11 @@ class ShiftPilotSeeder extends Seeder
                 'payload' => json_encode(['ip' => '192.168.1.' . rand(1, 255)]),
                 'ip_address' => '192.168.1.' . rand(1, 255),
                 'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'created_at' => $now->subHours(rand(1, 720)),
+                'created_at' => $now->copy()->subHours(rand(1, 720)),
             ];
-
-            // Insert in batches to avoid memory issues
-            if ($i % 500 === 0) {
-                DB::table('audit_logs')->insert($auditLogs);
-                $auditLogs = [];
-            }
         }
 
-        // Insert remaining logs
-        if (!empty($auditLogs)) {
-            DB::table('audit_logs')->insert($auditLogs);
-        }
-
-        $this->command->info('Created 2000 audit log entries');
+        DB::table('audit_logs')->insert($auditLogs);
+        $this->command->info('Created ' . count($auditLogs) . ' audit log entries');
     }
 }
