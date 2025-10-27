@@ -32,6 +32,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         zip \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+# Install Redis extension
+RUN pecl install redis && docker-php-ext-enable redis
+
 # Install Xdebug
 RUN pecl install xdebug && docker-php-ext-enable xdebug
 
