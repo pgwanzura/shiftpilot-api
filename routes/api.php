@@ -55,12 +55,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/placements/{placement}/cancel', [PlacementController::class, 'cancel']);
     });
 
-    // Route::prefix('agency')->group(function () {
-    //     Route::get('/dashboard/stats', [AgencyController::class, 'getDashboardStats']);
+    Route::prefix('agency')->group(function () {
+        Route::get('/dashboard/stats', [AgencyController::class, 'getDashboardStats']);
 
-    //     Route::get('/placements', [PlacementController::class, 'index']);
-    //     Route::get('/placements/{placement}', [PlacementController::class, 'show']);
-    // });
+        Route::get('/placements', [PlacementController::class, 'index']);
+        Route::get('/placements/{placement}', [PlacementController::class, 'show']);
+    });
 
 
     Route::prefix('admin')->group(function () {
@@ -70,12 +70,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 });
 
-Route::prefix('agency')->group(function () {
-        Route::get('/dashboard/stats', [AgencyController::class, 'getDashboardStats']);
 
-        Route::get('/placements', [PlacementController::class, 'index']);
-        Route::get('/placements/{placement}', [PlacementController::class, 'show']);
-    });
 
 
 /*-------------------------------------------------------------------------

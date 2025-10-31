@@ -14,14 +14,24 @@ class User extends Authenticatable
     use HasApiTokens;
 
     protected $fillable = [
-        'name', 'email', 'password', 'role', 'phone', 'status',
-        'address', 'date_of_birth', 'emergency_contact_name',
-        'emergency_contact_phone', 'meta', 'email_verified_at',
+        'name',
+        'email',
+        'password',
+        'role',
+        'phone',
+        'status',
+        'address',
+        'date_of_birth',
+        'emergency_contact_name',
+        'emergency_contact_phone',
+        'meta',
+        'email_verified_at',
         'last_login_at'
     ];
 
     protected $hidden = [
-        'password', 'remember_token',
+        'password',
+        'remember_token',
     ];
 
     protected $casts = [
@@ -109,5 +119,20 @@ class User extends Authenticatable
     public function canManageShifts()
     {
         return in_array($this->role, ['agency_admin', 'employer_admin', 'agent', 'super_admin']);
+    }
+
+    public function isAgency()
+    {
+        return $this->role === 'agency_admin' || $this->agency !== null;
+    }
+
+    public function isEmployer()
+    {
+        return $this->role === 'employer_admin' || $this->employer !== null;
+    }
+
+    public function isAgent()
+    {
+        return $this->role === 'agent' || $this->agent !== null;
     }
 }

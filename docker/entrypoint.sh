@@ -21,6 +21,8 @@ touch /var/log/xdebug.log
 chown www-data:www-data /var/log/xdebug.log
 chmod 666 /var/log/xdebug.log
 
+
+
 echo "Development setup complete!"
 
 exec "$@"

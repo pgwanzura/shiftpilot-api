@@ -81,17 +81,24 @@ class PlacementService
             $query->where('start_date', '<=', $filters['start_date_to']);
         }
 
-        if (auth()->user()->isAgency()) {
-            $agencyId = auth()->user()->agency->id;
-            $query->where(function ($q) use ($agencyId) {
-                $q->where('target_agencies', 'all')
-                    ->orWhereJsonContains('specific_agency_ids', $agencyId);
-            });
+        $user = auth()->user();
+        if ($user && $user->isAgency()) {
+            $user->loadMissing('agency'); // Ensure agency relationship is loaded
+            if ($user->agency) { // Check if agency exists after loading
+                $agencyId = $user->agency->id;
+                $query->where(function ($q) use ($agencyId) {
+                    $q->where('target_agencies', 'all')
+                        ->orWhereJsonContains('specific_agency_ids', $agencyId);
+                });
+            }
         }
 
         // Handle employer-specific placements
-        if (auth()->user()->isEmployer()) {
-            $query->where('employer_id', auth()->user()->employer->id);
+        if ($user && $user->isEmployer()) {
+            $user->loadMissing('employer'); // Ensure employer relationship is loaded
+            if ($user->employer) { // Check if employer exists after loading
+                $query->where('employer_id', $user->employer->id);
+            }
         }
 
         // Apply sorting

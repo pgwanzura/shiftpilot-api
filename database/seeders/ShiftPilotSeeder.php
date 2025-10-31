@@ -24,6 +24,7 @@ class ShiftPilotSeeder extends Seeder
         $this->createLocations();
         $this->createEmployees();
         $this->createPlacements();
+        $this->createAgencyPlacementResponses(); // NEW: Add placement responses
         $this->createEmployeeAvailabilities();
         $this->createTimeOffRequests();
         $this->createShiftTemplates();
@@ -402,25 +403,55 @@ class ShiftPilotSeeder extends Seeder
         $placements = [];
         $now = Carbon::now();
 
-        // Create placements for employees
-        for ($i = 1; $i <= 80; $i++) { // 80% of employees have placements
-            $employeeId = $i;
-            $employerId = rand(1, 8);
-            $agencyId = DB::table('employees')->where('id', $employeeId)->value('agency_id');
+        $experienceLevels = ['entry', 'intermediate', 'senior'];
+        $shiftPatterns = ['one_time', 'recurring', 'ongoing'];
+        $budgetTypes = ['hourly', 'daily', 'fixed'];
+        $targetAgencies = ['all', 'specific'];
+        $placementStatuses = ['draft', 'active', 'filled', 'cancelled', 'completed'];
 
-            if (!$agencyId) continue;
+        // Create 240 placements (trebled from 80)
+        for ($i = 1; $i <= 240; $i++) {
+            $employerId = rand(1, 8);
+            $locationId = DB::table('locations')
+                ->where('employer_id', $employerId)
+                ->inRandomOrder()
+                ->value('id');
+
+            if (!$locationId) continue;
+
+            $selectedAgencyId = rand(0, 10) > 3 ? rand(1, 5) : null; // 70% have selected agency
+            $selectedEmployeeId = $selectedAgencyId ? rand(1, 100) : null;
+
+            $startDate = $now->copy()->addDays(rand(1, 60));
+            $endDate = rand(0, 10) > 3 ? $startDate->copy()->addDays(rand(30, 365)) : null;
 
             $placements[] = [
-                'employee_id' => $employeeId,
                 'employer_id' => $employerId,
-                'agency_id' => $agencyId,
-                'start_date' => $now->copy()->subMonths(rand(1, 6))->format('Y-m-d'),
-                'end_date' => rand(0, 10) > 3 ? $now->copy()->addMonths(rand(1, 12))->format('Y-m-d') : null, // 70% have end date
-                'status' => $this->getPlacementStatus(),
-                'employee_rate' => rand(10, 20) + (rand(0, 99) / 100),
-                'client_rate' => rand(15, 30) + (rand(0, 99) / 100),
-                'notes' => 'Placement agreement for temporary work',
-                'created_at' => $now->copy()->subMonths(rand(2, 7)),
+                'title' => "Placement Position " . $i,
+                'description' => "We are looking for a skilled professional to join our team for this temporary placement.",
+                'role_requirements' => json_encode(['skills' => ['communication', 'teamwork'], 'experience' => 'relevant field']),
+                'required_qualifications' => json_encode($this->getQualifications(rand(1, 5))),
+                'experience_level' => $experienceLevels[array_rand($experienceLevels)],
+                'background_check_required' => rand(0, 10) > 7, // 30% require background check
+                'location_id' => $locationId,
+                'location_instructions' => rand(0, 10) > 5 ? "Report to main reception and ask for the hiring manager" : null,
+                'start_date' => $startDate->format('Y-m-d'),
+                'end_date' => $endDate?->format('Y-m-d'),
+                'shift_pattern' => $shiftPatterns[array_rand($shiftPatterns)],
+                'recurrence_rules' => $this->generateRecurrenceRules(),
+                'budget_type' => $budgetTypes[array_rand($budgetTypes)],
+                'budget_amount' => rand(15, 40) + (rand(0, 99) / 100),
+                'currency' => 'GBP',
+                'overtime_rules' => json_encode(['rate' => '1.5x after 40 hours']),
+                'target_agencies' => $targetAgencies[array_rand($targetAgencies)],
+                'specific_agency_ids' => $this->generateSpecificAgencyIds(),
+                'response_deadline' => $now->copy()->addDays(rand(7, 30)),
+                'status' => $placementStatuses[array_rand($placementStatuses)],
+                'selected_agency_id' => $selectedAgencyId,
+                'selected_employee_id' => $selectedEmployeeId,
+                'agreed_rate' => $selectedAgencyId ? rand(12, 35) + (rand(0, 99) / 100) : null,
+                'created_by_id' => $employerId + 9, // Employer admin user_id
+                'created_at' => $now->copy()->subDays(rand(1, 30)),
                 'updated_at' => $now,
             ];
         }
@@ -429,10 +460,132 @@ class ShiftPilotSeeder extends Seeder
         $this->command->info('Created ' . count($placements) . ' placements');
     }
 
+    private function generateRecurrenceRules()
+    {
+        $patterns = [
+            null,
+            ['type' => 'weekly', 'days' => ['mon', 'wed', 'fri']],
+            ['type' => 'daily', 'days' => ['mon', 'tue', 'wed', 'thu', 'fri']],
+            ['type' => 'custom', 'schedule' => 'Every other day']
+        ];
+        return json_encode($patterns[array_rand($patterns)]);
+    }
+
+    private function generateSpecificAgencyIds()
+    {
+        if (rand(0, 10) > 7) { // 30% have specific agencies
+            $agencyCount = rand(1, 3);
+            $agencies = [];
+            for ($i = 0; $i < $agencyCount; $i++) {
+                $agencies[] = rand(1, 5);
+            }
+            return json_encode(array_unique($agencies));
+        }
+        return null;
+    }
+
     private function getPlacementStatus()
     {
         $statuses = ['active', 'active', 'active', 'completed', 'terminated'];
         return $statuses[array_rand($statuses)];
+    }
+
+    private function createAgencyPlacementResponses()
+    {
+        $responses = [];
+        $now = Carbon::now();
+
+        // Get active placements that would have agency responses
+        $placements = DB::table('placements')
+            ->whereIn('status', ['active', 'draft'])
+            ->get();
+
+        foreach ($placements as $placement) {
+            // For each placement, create responses from multiple agencies
+            $numResponses = rand(1, 3); // 1-3 agencies respond to each placement
+
+            // Determine which agencies can respond
+            if ($placement->target_agencies === 'specific' && $placement->specific_agency_ids) {
+                $specificAgencies = json_decode($placement->specific_agency_ids, true);
+                $agencies = DB::table('agencies')
+                    ->whereIn('id', $specificAgencies)
+                    ->inRandomOrder()
+                    ->limit($numResponses)
+                    ->get();
+            } else {
+                // All agencies can respond
+                $agencies = DB::table('agencies')
+                    ->inRandomOrder()
+                    ->limit($numResponses)
+                    ->get();
+            }
+
+            foreach ($agencies as $agency) {
+                $status = $this->getPlacementResponseStatus();
+                $submittedAt = $status !== 'draft' ? $now->copy()->subDays(rand(1, 30)) : null;
+                $respondedAt = in_array($status, ['accepted', 'rejected', 'withdrawn']) ? $submittedAt?->copy()->addDays(rand(1, 7)) : null;
+
+                // Convert arrays to JSON strings
+                $submittedEmployees = $status === 'submitted' ? json_encode($this->generateSubmittedEmployees()) : null;
+                $employerFeedback = $status === 'rejected' ? json_encode($this->generateEmployerFeedback()) : null;
+
+                $responses[] = [
+                    'placement_id' => $placement->id,
+                    'agency_id' => $agency->id,
+                    'status' => $status,
+                    'submitted_employees' => $submittedEmployees,
+                    'employer_feedback' => $employerFeedback,
+                    'submitted_at' => $submittedAt,
+                    'responded_at' => $respondedAt,
+                    'created_at' => $now->copy()->subDays(rand(1, 60)),
+                    'updated_at' => $now,
+                ];
+            }
+        }
+
+        DB::table('agency_placement_responses')->insert($responses);
+        $this->command->info('Created ' . count($responses) . ' agency placement responses');
+    }
+
+    private function getPlacementResponseStatus()
+    {
+        $statuses = ['draft', 'submitted', 'submitted', 'accepted', 'rejected', 'withdrawn'];
+        return $statuses[array_rand($statuses)];
+    }
+
+    private function generateSubmittedEmployees()
+    {
+        $employees = [];
+        $numEmployees = rand(1, 3);
+
+        for ($i = 1; $i <= $numEmployees; $i++) {
+            $employees[] = [
+                'employee_id' => rand(1, 100),
+                'name' => "Employee " . rand(1, 100),
+                'rate' => rand(12, 25) + (rand(0, 99) / 100),
+                'qualifications' => $this->getQualifications(rand(1, 5)),
+                'notes' => 'Available for immediate start'
+            ];
+        }
+
+        return $employees;
+    }
+
+    private function generateEmployerFeedback()
+    {
+        $rejectionReasons = [
+            'Rates too high',
+            'Employees do not meet qualification requirements',
+            'Timing does not work for our schedule',
+            'Found better candidates from another agency',
+            'Budget constraints'
+        ];
+
+        return [
+            'rejection_reason' => $rejectionReasons[array_rand($rejectionReasons)],
+            'feedback_date' => Carbon::now()->subDays(rand(1, 14))->format('Y-m-d H:i:s'),
+            'contact_person' => 'Hiring Manager'
+        ];
     }
 
     private function createEmployeeAvailabilities()
@@ -572,8 +725,7 @@ class ShiftPilotSeeder extends Seeder
 
             $employeeId = rand(0, 10) > 2 ? rand(1, 100) : null; // 80% assigned
             $placementId = $employeeId ? DB::table('placements')
-                ->where('employee_id', $employeeId)
-                ->where('employer_id', $employerId)
+                ->where('selected_employee_id', $employeeId)
                 ->value('id') : null;
 
             $startTime = $now->copy()

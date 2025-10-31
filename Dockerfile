@@ -1,3 +1,4 @@
+ARG CACHE_BREAKER=0
 # Use official PHP 8.2 FPM image
 FROM php:8.2-fpm AS base
 

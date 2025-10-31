@@ -174,4 +174,40 @@ class Placement extends Model
             ->where('agency_id', $agencyId)
             ->exists();
     }
+
+    /**
+     * Calculate total budget for the placement
+     */
+    public function calculateTotalBudget()
+    {
+        $total = 0.0;
+
+        if ($this->budget_amount) {
+            $total = (float) $this->budget_amount;
+        }
+
+        if ($this->overtime_budget) {
+            $total += (float) $this->overtime_budget;
+        }
+
+
+        if ($this->additional_costs) {
+            $total += (float) $this->additional_costs;
+        }
+
+        return $total;
+    }
+
+    public function calculateEstimatedBudgetFromShifts()
+    {
+        if (!$this->relationLoaded('shifts')) {
+            return 0.0;
+        }
+
+        return $this->shifts->sum(function ($shift) {
+            $hours = $shift->hours ?? $shift->duration_hours ?? 0;
+            $rate = $shift->rate ?? $this->agreed_rate ?? 0;
+            return $hours * $rate;
+        });
+    }
 }
