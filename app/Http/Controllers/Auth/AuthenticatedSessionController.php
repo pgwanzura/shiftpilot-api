@@ -18,10 +18,14 @@ class AuthenticatedSessionController extends Controller
         $user = Auth::user();
         $user->update(['last_login_at' => now()]);
 
+        $token = $user->createToken('auth-token')->plainTextToken;
+
         $this->loadRoleSpecificRelations($user);
 
         return response()->json([
             'user' => $user,
+            'access_token' => $token,
+            'token_type' => 'Bearer',
             'permissions' => $this->getUserPermissions($user),
             'profile_complete' => $user->has_complete_profile,
             'message' => 'Login successful'

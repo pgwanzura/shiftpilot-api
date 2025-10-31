@@ -4,63 +4,55 @@ namespace App\Policies;
 
 use App\Models\Placement;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
 
 class PlacementPolicy
 {
-    /**
-     * Determine whether the user can view any models.
-     */
     public function viewAny(User $user): bool
     {
-        return false;
+        return $user->isEmployer() || $user->isAgency() || $user->isAdmin();
     }
 
-    /**
-     * Determine whether the user can view the model.
-     */
     public function view(User $user, Placement $placement): bool
     {
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        if ($user->isEmployer()) {
+            return $placement->employer_id === $user->employer->id;
+        }
+
+        if ($user->isAgency()) {
+            return $placement->target_agencies === 'all' ||
+                in_array($user->agency->id, $placement->specific_agency_ids ?? []);
+        }
+
         return false;
     }
 
-    /**
-     * Determine whether the user can create models.
-     */
     public function create(User $user): bool
     {
-        return false;
+        return $user->isEmployer();
     }
 
-    /**
-     * Determine whether the user can update the model.
-     */
     public function update(User $user, Placement $placement): bool
     {
-        return false;
+        return $user->isEmployer() &&
+            $placement->employer_id === $user->employer->id &&
+            $placement->isDraft();
     }
 
-    /**
-     * Determine whether the user can delete the model.
-     */
     public function delete(User $user, Placement $placement): bool
     {
-        return false;
+        return $user->isEmployer() &&
+            $placement->employer_id === $user->employer->id &&
+            $placement->isDraft();
     }
 
-    /**
-     * Determine whether the user can restore the model.
-     */
-    public function restore(User $user, Placement $placement): bool
+    public function activate(User $user, Placement $placement): bool
     {
-        return false;
-    }
-
-    /**
-     * Determine whether the user can permanently delete the model.
-     */
-    public function forceDelete(User $user, Placement $placement): bool
-    {
-        return false;
+        return $user->isEmployer() &&
+            $placement->employer_id === $user->employer->id &&
+            $placement->canBeActivated();
     }
 }

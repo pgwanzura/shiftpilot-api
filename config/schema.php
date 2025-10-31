@@ -436,34 +436,56 @@ return [
             'table' => 'placements',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'employee_id' => ['type' => 'foreign', 'references' => 'employees,id'],
                 'employer_id' => ['type' => 'foreign', 'references' => 'employers,id'],
-                'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
+                'title' => ['type' => 'string'],
+                'description' => ['type' => 'text', 'nullable' => true],
+                'role_requirements' => ['type' => 'json'],
+                'required_qualifications' => ['type' => 'json', 'nullable' => true],
+                'experience_level' => ['type' => 'string', 'default' => 'entry'],
+                'background_check_required' => ['type' => 'boolean', 'default' => false],
+                'location_id' => ['type' => 'foreign', 'references' => 'locations,id'],
+                'location_instructions' => ['type' => 'text', 'nullable' => true],
                 'start_date' => ['type' => 'date'],
                 'end_date' => ['type' => 'date', 'nullable' => true],
-                'status' => ['type' => 'string', 'default' => 'active'], // active, completed, terminated
-                'employee_rate' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2, 'nullable' => true], // pay to employee
-                'client_rate' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2, 'nullable' => true], // bill to employer
-                'notes' => ['type' => 'text', 'nullable' => true],
+                'shift_pattern' => ['type' => 'string', 'default' => 'one_time'],
+                'recurrence_rules' => ['type' => 'json', 'nullable' => true],
+                'budget_type' => ['type' => 'string', 'default' => 'hourly'],
+                'budget_amount' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
+                'currency' => ['type' => 'string', 'default' => 'GBP'],
+                'overtime_rules' => ['type' => 'json', 'nullable' => true],
+                'target_agencies' => ['type' => 'string', 'default' => 'all'],
+                'specific_agency_ids' => ['type' => 'json', 'nullable' => true],
+                'response_deadline' => ['type' => 'timestamp', 'nullable' => true],
+                'status' => ['type' => 'string', 'default' => 'draft'],
+                'selected_agency_id' => ['type' => 'foreign', 'references' => 'agencies,id', 'nullable' => true],
+                'selected_employee_id' => ['type' => 'foreign', 'references' => 'employees,id', 'nullable' => true],
+                'agreed_rate' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2, 'nullable' => true],
+                'created_by_id' => ['type' => 'foreign', 'references' => 'users,id'],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
             'validation' => [
-                'employee_id' => 'required|exists:employees,id',
                 'employer_id' => 'required|exists:employers,id',
-                'agency_id' => 'required|exists:agencies,id',
-                'start_date' => 'required|date'
+                'title' => 'required|string|max:255',
+                'location_id' => 'required|exists:locations,id',
+                'start_date' => 'required|date',
+                'budget_amount' => 'required|numeric|min:0',
+                'target_agencies' => 'required|in:all,specific',
+                'status' => 'required|in:draft,active,filled,cancelled,completed'
             ],
             'relationships' => [
-                ['type' => 'belongsTo', 'related' => 'Employee'],
                 ['type' => 'belongsTo', 'related' => 'Employer'],
-                ['type' => 'belongsTo', 'related' => 'Agency'],
+                ['type' => 'belongsTo', 'related' => 'Location'],
+                ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'created_by_id'],
+                ['type' => 'belongsTo', 'related' => 'Agency', 'foreign_key' => 'selected_agency_id'],
+                ['type' => 'belongsTo', 'related' => 'Employee', 'foreign_key' => 'selected_employee_id'],
+                ['type' => 'hasMany', 'related' => 'AgencyResponse'],
                 ['type' => 'hasMany', 'related' => 'Shift']
             ],
             'policy_rules' => [
-                'create' => ['agency_admin', 'super_admin'],
-                'view' => ['agency_admin', 'employer_admin', 'super_admin'],
-                'update' => ['agency_admin', 'super_admin'],
+                'create' => ['employer_admin', 'super_admin'],
+                'view' => ['employer_admin', 'agency_admin', 'super_admin'],
+                'update' => ['employer_admin', 'super_admin'],
                 'delete' => ['super_admin']
             ]
         ],
@@ -1152,14 +1174,14 @@ return [
         'shift_lifecycle' => [
             ['step' => 'employer_creates_shift', 'actor' => 'employer_admin', 'emit' => 'shift.requested', 'jobs' => ['ValidateShift', 'FindAvailableEmployees'], 'notifications' => ['shift.requested:agency']],
             ['step' => 'agency_offers_employee', 'actor' => 'agent', 'emit' => 'shift_offer.sent', 'jobs' => ['LockCandidate', 'NotifyEmployee'], 'notifications' => ['shift_offer.sent:employee']],
-            ['step' => 'employee_responds_offer', 'actor' => 'employee', 'emit' => 'shift_offer.accepted', 'jobs' => ['CreatePlacementIfMissing', 'CreateAssignment'], 'notifications' => ['shift_offer.accepted:agency','shift.assigned:employer']],
+            ['step' => 'employee_responds_offer', 'actor' => 'employee', 'emit' => 'shift_offer.accepted', 'jobs' => ['CreatePlacementIfMissing', 'CreateAssignment'], 'notifications' => ['shift_offer.accepted:agency', 'shift.assigned:employer']],
             ['step' => 'employee_clocks_in_out', 'actor' => 'employee', 'emit' => null, 'jobs' => ['CalculateHours'], 'notifications' => []],
-            ['step' => 'employee_marks_completed', 'actor' => 'employee', 'emit' => 'shift.completed', 'jobs' => ['CreateTimesheet','NotifyAgencyForApproval'], 'notifications' => ['timesheet.submitted:agency']],
-            ['step' => 'agency_approves_timesheet', 'actor' => 'agency_admin', 'emit' => 'timesheet.agency_approved', 'jobs' => ['MarkTimesheetAgencyApproved','NotifyEmployerForSignoff'], 'notifications' => ['timesheet.agency_approved:employer']],
-            ['step' => 'employer_contact_signs', 'actor' => 'contact', 'emit' => 'timesheet.employer_approved', 'jobs' => ['MarkTimesheetEmployerApproved','GenerateInvoice'], 'notifications' => ['timesheet.employer_approved:agency','invoice.generated:employer']],
-            ['step' => 'invoice_to_employer', 'actor' => 'system', 'emit' => 'invoice.generated', 'jobs' => ['CreateInvoiceLines','ApplyTaxes','SendInvoice'], 'notifications' => ['invoice.generated:employer']],
-            ['step' => 'employer_pays_invoice', 'actor' => 'employer_admin', 'emit' => 'invoice.paid', 'jobs' => ['RecordPayment','SchedulePayoutToAgency','RecordPlatformFee'], 'notifications' => ['invoice.paid:agency','invoice.paid:shiftpilot']],
-            ['step' => 'agency_processes_payroll', 'actor' => 'agency_admin', 'emit' => 'payout.processed', 'jobs' => ['CreatePayrollRecords','ExecutePayouts','MarkPayrollPaid'], 'notifications' => ['payout.processed:employee','payout.processed:agency']],
+            ['step' => 'employee_marks_completed', 'actor' => 'employee', 'emit' => 'shift.completed', 'jobs' => ['CreateTimesheet', 'NotifyAgencyForApproval'], 'notifications' => ['timesheet.submitted:agency']],
+            ['step' => 'agency_approves_timesheet', 'actor' => 'agency_admin', 'emit' => 'timesheet.agency_approved', 'jobs' => ['MarkTimesheetAgencyApproved', 'NotifyEmployerForSignoff'], 'notifications' => ['timesheet.agency_approved:employer']],
+            ['step' => 'employer_contact_signs', 'actor' => 'contact', 'emit' => 'timesheet.employer_approved', 'jobs' => ['MarkTimesheetEmployerApproved', 'GenerateInvoice'], 'notifications' => ['timesheet.employer_approved:agency', 'invoice.generated:employer']],
+            ['step' => 'invoice_to_employer', 'actor' => 'system', 'emit' => 'invoice.generated', 'jobs' => ['CreateInvoiceLines', 'ApplyTaxes', 'SendInvoice'], 'notifications' => ['invoice.generated:employer']],
+            ['step' => 'employer_pays_invoice', 'actor' => 'employer_admin', 'emit' => 'invoice.paid', 'jobs' => ['RecordPayment', 'SchedulePayoutToAgency', 'RecordPlatformFee'], 'notifications' => ['invoice.paid:agency', 'invoice.paid:shiftpilot']],
+            ['step' => 'agency_processes_payroll', 'actor' => 'agency_admin', 'emit' => 'payout.processed', 'jobs' => ['CreatePayrollRecords', 'ExecutePayouts', 'MarkPayrollPaid'], 'notifications' => ['payout.processed:employee', 'payout.processed:agency']],
         ],
 
         /*
@@ -1181,7 +1203,7 @@ return [
         'auto_scheduling' => [
             ['step' => 'find_available_employees', 'actor' => 'system', 'emit' => null, 'jobs' => ['MatchEmployeesToShift', 'ScoreCandidates'], 'notifications' => []],
             ['step' => 'auto_offer_shifts', 'actor' => 'system', 'emit' => 'shift_offer.sent', 'jobs' => ['CreateShiftOffers', 'NotifyEmployees'], 'notifications' => ['shift_offer.sent:employee']],
-            ['step' => 'monitor_responses', 'actor' => 'system', 'emit' => null, 'jobs' => ['TrackOfferExpiry', 'EscalateUnfilledShifts'], 'notifications' => ['shift_offer.expiring:employee','shift.unfilled:agency']],
+            ['step' => 'monitor_responses', 'actor' => 'system', 'emit' => null, 'jobs' => ['TrackOfferExpiry', 'EscalateUnfilledShifts'], 'notifications' => ['shift_offer.expiring:employee', 'shift.unfilled:agency']],
         ],
 
         /*
@@ -1190,9 +1212,9 @@ return [
         |--------------------------------------------------------------------------
         */
         'platform_billing' => [
-            ['step' => 'subscription_renewal', 'actor' => 'system', 'emit' => 'subscription.renewed', 'jobs' => ['ChargeSubscription','RecordRevenue','NotifySubscriber'], 'notifications' => ['subscription.renewed:subscriber']],
-            ['step' => 'transaction_commission', 'actor' => 'system', 'emit' => null, 'jobs' => ['CalculateCommission','InvoiceAgencyForCommission','RecordPlatformRevenue'], 'notifications' => ['commission.invoice:agency']],
-            ['step' => 'agency_pays_platform', 'actor' => 'agency_admin', 'emit' => null, 'jobs' => ['RecordPayment','ApplyBalance'], 'notifications' => ['payment.received:agency_admin']]
+            ['step' => 'subscription_renewal', 'actor' => 'system', 'emit' => 'subscription.renewed', 'jobs' => ['ChargeSubscription', 'RecordRevenue', 'NotifySubscriber'], 'notifications' => ['subscription.renewed:subscriber']],
+            ['step' => 'transaction_commission', 'actor' => 'system', 'emit' => null, 'jobs' => ['CalculateCommission', 'InvoiceAgencyForCommission', 'RecordPlatformRevenue'], 'notifications' => ['commission.invoice:agency']],
+            ['step' => 'agency_pays_platform', 'actor' => 'agency_admin', 'emit' => null, 'jobs' => ['RecordPayment', 'ApplyBalance'], 'notifications' => ['payment.received:agency_admin']]
         ]
     ],
 
