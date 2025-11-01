@@ -141,7 +141,7 @@ class PlacementController extends Controller
         }
     }
 
-    public function stats(): JsonResponse
+    public function getPlacementOverviewStats(): JsonResponse
     {
         $stats = $this->placementService->getPlacementStats();
 
@@ -190,7 +190,7 @@ class PlacementController extends Controller
         if (class_exists('App\Models\AgencyResponse')) {
             return \App\Models\AgencyResponse::count();
         }
-        
+
         // Alternative: if responses are stored differently
         // You might need to adjust this based on your actual data structure
         return Placement::withCount('agencyResponses')->get()->sum('agency_responses_count');
