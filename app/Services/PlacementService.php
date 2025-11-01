@@ -189,6 +189,17 @@ class PlacementService
             'cancelled' => Placement::where('employer_id', $employerId)
                 ->where('status', PlacementStatus::CANCELLED->value)
                 ->count(),
+            'responses' => $this->getTotalResponses(),
         ];
+    }
+
+    private function getTotalResponses(): int
+    {
+
+        if (class_exists('App\Models\AgencyPlacementResponse')) {
+            return \App\Models\AgencyPlacementResponse::count();
+        }
+
+        return Placement::withCount('agencyResponses')->get()->sum('agency_responses_count');
     }
 }

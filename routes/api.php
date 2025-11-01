@@ -60,6 +60,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/placements', [PlacementController::class, 'index']);
         Route::get('/placements/{placement}', [PlacementController::class, 'show']);
+        Route::get('/placements/stats/detailed', [PlacementController::class, 'getPlacementStats']);
     });
 
 

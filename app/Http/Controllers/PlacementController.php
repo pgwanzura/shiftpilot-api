@@ -150,4 +150,49 @@ class PlacementController extends Controller
             'data' => $stats,
         ]);
     }
+
+    /**
+     * Get comprehensive placement statistics
+     * Replaces the mock sync function from the frontend
+     */
+    public function getPlacementStats(): JsonResponse
+    {
+        try {
+            $stats = [
+                'total' => Placement::count(),
+                'active' => Placement::where('status', PlacementStatus::ACTIVE->value)->count(),
+                'draft' => Placement::where('status', PlacementStatus::DRAFT->value)->count(),
+                'filled' => Placement::where('status', PlacementStatus::FILLED->value)->count(),
+                'completed' => Placement::where('status', PlacementStatus::COMPLETED->value)->count(),
+                'responses' => $this->getTotalResponses(),
+            ];
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $stats,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch placement statistics',
+                'error' => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Calculate total responses across all placements
+     */
+    private function getTotalResponses(): int
+    {
+        // Assuming you have a relationship or model for agency responses
+        // Adjust this based on your actual database structure
+        if (class_exists('App\Models\AgencyResponse')) {
+            return \App\Models\AgencyResponse::count();
+        }
+        
+        // Alternative: if responses are stored differently
+        // You might need to adjust this based on your actual data structure
+        return Placement::withCount('agencyResponses')->get()->sum('agency_responses_count');
+    }
 }
