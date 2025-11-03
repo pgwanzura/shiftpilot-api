@@ -1,5 +1,4 @@
 <?php
-// app/Http/Resources/PlacementCollection.php
 
 namespace App\Http\Resources;
 
@@ -10,12 +9,17 @@ class PlacementCollection extends ResourceCollection
 {
     public function toArray(Request $request): array
     {
+        $total = $this->total();
+        if (is_array($total)) {
+            $total = $total[0] ?? 0;
+        }
+
         return [
-            'data' => $this->collection,
+            'data' => PlacementResource::collection($this->collection),
             'meta' => [
                 'current_page' => $this->currentPage(),
                 'per_page' => $this->perPage(),
-                'total' => $this->total(),
+                'total' => (int) $total,
                 'total_pages' => $this->lastPage(),
                 'from' => $this->firstItem(),
                 'to' => $this->lastItem(),
