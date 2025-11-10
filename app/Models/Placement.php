@@ -175,9 +175,6 @@ class Placement extends Model
             ->exists();
     }
 
-    /**
-     * Calculate total budget for the placement
-     */
     public function calculateTotalBudget()
     {
         $total = 0.0;
@@ -208,6 +205,18 @@ class Placement extends Model
             $hours = $shift->hours ?? $shift->duration_hours ?? 0;
             $rate = $shift->rate ?? $this->agreed_rate ?? 0;
             return $hours * $rate;
+        });
+    }
+
+    public function scopeWhereBetweenDates($query, string $startDate, string $endDate)
+    {
+        return $query->where(function ($query) use ($startDate, $endDate) {
+            $query->whereBetween('start_date', [$startDate, $endDate])
+                ->orWhereBetween('end_date', [$startDate, $endDate])
+                ->orWhere(function ($q) use ($startDate, $endDate) {
+                    $q->where('start_date', '<=', $startDate)
+                        ->where('end_date', '>=', $endDate);
+                });
         });
     }
 }

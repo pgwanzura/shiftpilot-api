@@ -34,4 +34,13 @@ class EmployeeAvailability extends Model
     {
         return $this->belongsTo(Employee::class);
     }
+
+    public function scopeWhereOverlappingDates($query, string $startDate, string $endDate)
+    {
+        return $query->where(function ($query) use ($startDate, $endDate) {
+            $query->whereDate('start_date', '<=', $endDate)
+                ->whereDate('end_date', '>=', $startDate)
+                ->orWhereNull('end_date');
+        });
+    }
 }

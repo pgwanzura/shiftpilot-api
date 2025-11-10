@@ -12,9 +12,17 @@ class TimeOffRequest extends Model
     protected $table = 'time_off_requests';
 
     protected $fillable = [
-        'employee_id', 'type', 'start_date', 'end_date',
-        'start_time', 'end_time', 'status', 'reason',
-        'approved_by_id', 'approved_at', 'attachments'
+        'employee_id',
+        'type',
+        'start_date',
+        'end_date',
+        'start_time',
+        'end_time',
+        'status',
+        'reason',
+        'approved_by_id',
+        'approved_at',
+        'attachments'
     ];
 
     protected $casts = [
@@ -32,5 +40,13 @@ class TimeOffRequest extends Model
     public function approvedBy()
     {
         return $this->belongsTo(User::class, 'approved_by_id');
+    }
+
+    public function scopeWhereBetweenDates($query, string $startDate, string $endDate)
+    {
+        return $query->where(function ($query) use ($startDate, $endDate) {
+            $query->whereBetween('start_date', [$startDate, $endDate])
+                ->orWhereBetween('end_date', [$startDate, $endDate]);
+        });
     }
 }
