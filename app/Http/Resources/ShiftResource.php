@@ -2,38 +2,52 @@
 
 namespace App\Http\Resources;
 
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class ShiftResource extends JsonResource
 {
-    public function toArray($request): array
+    public function toArray(Request $request): array
     {
         return [
             'id' => $this->id,
-            'employer_id' => $this->employer_id,
-            'agency_id' => $this->agency_id,
-            'placement_id' => $this->placement_id,
-            'employee_id' => $this->employee_id,
-            'agent_id' => $this->agent_id,
+            'assignment_id' => $this->assignment_id,
             'location_id' => $this->location_id,
+            'shift_date' => $this->shift_date->format('Y-m-d'),
             'start_time' => $this->start_time,
             'end_time' => $this->end_time,
-            'hourly_rate' => $this->hourly_rate,
-            'status' => $this->status,
-            'created_by_type' => $this->created_by_type,
-            'created_by_id' => $this->created_by_id,
-            'meta' => $this->meta,
+            'hourly_rate' => (float) $this->hourly_rate,
+            'status' => $this->status->value,
+            'status_label' => $this->status->label(),
             'notes' => $this->notes,
+            'meta' => $this->meta,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
-            'employer' => $this->whenLoaded('employer'),
-            'agency' => $this->whenLoaded('agency'),
-            'placement' => $this->whenLoaded('placement'),
-            'employee' => $this->whenLoaded('employee'),
-            'agent' => $this->whenLoaded('agent'),
-            'location' => $this->whenLoaded('location'),
-            'timesheet' => $this->whenLoaded('timesheet'),
-            'shift_approvals' => $this->whenLoaded('shiftApprovals'),
+            'duration_hours' => $this->duration_hours,
+            'is_past' => $this->is_past,
+            'is_future' => $this->is_future,
+            'is_ongoing' => $this->is_ongoing,
+            'total_earnings' => (float) $this->total_earnings,
+            'can_be_updated' => $this->canBeUpdated(),
+            'can_be_cancelled' => $this->canBeCancelled(),
+            'can_be_started' => $this->canBeStarted(),
+            'can_be_completed' => $this->canBeCompleted(),
+            'assignment' => new AssignmentResource($this->whenLoaded('assignment')),
+            'location' => new LocationResource($this->whenLoaded('location')),
+            'timesheet' => new TimesheetResource($this->whenLoaded('timesheet')),
+            'shift_approvals' => ShiftApprovalResource::collection($this->whenLoaded('shiftApprovals')),
+            'shift_offers' => ShiftOfferResource::collection($this->whenLoaded('shiftOffers')),
+            'employee' => new EmployeeResource($this->whenLoaded('employee')),
+            'agency' => new AgencyResource($this->whenLoaded('agency')),
+            'employer' => new EmployerResource($this->whenLoaded('employer')),
+            'validation' => $this->when(
+                $request->user()?->can('validate', $this->resource),
+                fn() => [
+                    'has_overlaps' => $this->checkForOverlaps(),
+                    'within_assignment_dates' => $this->isWithinAssignmentDates(),
+                    'within_employee_availability' => $this->isWithinEmployeeAvailability(),
+                ]
+            ),
         ];
     }
 }

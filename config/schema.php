@@ -548,8 +548,6 @@ return [
                 'shift_request_id' => ['type' => 'foreign', 'references' => 'shift_requests,id'],
                 'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
                 'proposed_employee_id' => ['type' => 'foreign', 'references' => 'employees,id', 'nullable' => true],
-                'proposed_rate' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
-                'markup_amount' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
                 'status' => ['type' => 'string', 'default' => 'pending'],
                 'notes' => ['type' => 'text', 'nullable' => true],
                 'submitted_by_id' => ['type' => 'foreign', 'references' => 'users,id'],
@@ -649,6 +647,7 @@ return [
                 'id' => ['type' => 'increments'],
                 'assignment_id' => ['type' => 'foreign', 'references' => 'assignments,id'],
                 'location_id' => ['type' => 'foreign', 'references' => 'locations,id'],
+                'shift_date' => ['type' => 'date'],
                 'start_time' => ['type' => 'timestamp'],
                 'end_time' => ['type' => 'timestamp'],
                 'hourly_rate' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2],
@@ -1062,8 +1061,8 @@ return [
         | Notification
         |--------------------------------------------------------------------------
         */
-        'notification' => [
-            'table' => 'notifications',
+        'system_notification' => [
+            'table' => 'system_notifications',
             'fields' => [
                 'id' => ['type' => 'increments'],
                 'recipient_type' => ['type' => 'string'],

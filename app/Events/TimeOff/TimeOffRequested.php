@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Events\TimeOffRequest;
+namespace App\Events\TimeOff;
 
 use App\Models\TimeOffRequest;
 use Illuminate\Foundation\Events\Dispatchable;
@@ -11,7 +11,5 @@ class TimeOffRequested
     use Dispatchable;
     use SerializesModels;
 
-    public function __construct(public TimeOffRequest $timeOffRequest)
-    {
-    }
+    public function __construct(public TimeOffRequest $timeOffRequest) {}
 }

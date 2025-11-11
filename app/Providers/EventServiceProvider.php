@@ -7,7 +7,6 @@ use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvi
 class EventServiceProvider extends ServiceProvider
 {
     protected $listen = [
-        // Location Events
         \App\Events\Location\LocationCreated::class => [
             \App\Listeners\LogLocationActivity::class,
             \App\Listeners\NotifyAgencyOfNewLocation::class,
@@ -16,12 +15,10 @@ class EventServiceProvider extends ServiceProvider
             \App\Listeners\LogLocationActivity::class,
         ],
 
-        // User Events
         \App\Events\UserRegistered::class => [
             \App\Listeners\SendUserWelcomeNotification::class,
         ],
 
-        // Shift Events
         \App\Events\Shift\ShiftCreated::class => [
             \App\Listeners\LogShiftActivity::class,
         ],
@@ -41,7 +38,6 @@ class EventServiceProvider extends ServiceProvider
             \App\Listeners\ProcessShiftCompleted::class,
         ],
 
-        // Shift Offer Events
         \App\Events\Shift\ShiftOfferSent::class => [
             \App\Listeners\ProcessShiftOfferSent::class,
         ],
@@ -52,25 +48,23 @@ class EventServiceProvider extends ServiceProvider
             \App\Listeners\ProcessShiftOfferRejected::class,
         ],
 
-        // Timesheet Events
-        \App\Events\TimesheetSubmitted::class => [
+        \App\Events\Timesheet\TimesheetSubmitted::class => [
             \App\Listeners\LogTimesheetActivity::class,
             \App\Listeners\ProcessTimesheetSubmitted::class,
         ],
-        \App\Events\TimesheetApproved::class => [
+        \App\Events\Timesheet\TimesheetApproved::class => [
             \App\Listeners\LogTimesheetActivity::class,
         ],
-        \App\Events\TimesheetRejected::class => [
+        \App\Events\Timesheet\TimesheetRejected::class => [
             \App\Listeners\LogTimesheetActivity::class,
         ],
-        \App\Events\TimesheetAgencyApproved::class => [
+        \App\Events\Timesheet\TimesheetAgencyApproved::class => [
             \App\Listeners\ProcessTimesheetAgencyApproved::class,
         ],
-        \App\Events\TimesheetEmployerApproved::class => [
+        \App\Events\Timesheet\TimesheetEmployerApproved::class => [
             \App\Listeners\ProcessTimesheetEmployerApproved::class,
         ],
 
-        // Financial Events
         \App\Events\InvoiceGenerated::class => [
             \App\Listeners\SendInvoiceNotification::class,
             \App\Listeners\ProcessInvoiceGenerated::class,
@@ -99,10 +93,10 @@ class EventServiceProvider extends ServiceProvider
         \App\Events\AvailabilityUpdated::class => [
             \App\Listeners\ProcessAvailabilityUpdated::class,
         ],
-        \App\Events\TimeOffRequested::class => [
+        \App\Events\TimeOff\TimeOffRequested::class => [
             \App\Listeners\ProcessTimeOffRequested::class,
         ],
-        \App\Events\TimeOffApproved::class => [
+        \App\Events\TimeOff\TimeOffApproved::class => [
             \App\Listeners\ProcessTimeOffApproved::class,
         ],
 

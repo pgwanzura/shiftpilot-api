@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Events\TimeOffRequest;
+namespace App\Events\TimeOff;
 
 use App\Models\TimeOffRequest;
 use Illuminate\Foundation\Events\Dispatchable;
