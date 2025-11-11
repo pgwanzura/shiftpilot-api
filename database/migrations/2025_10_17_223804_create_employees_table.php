@@ -4,26 +4,31 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class () extends Migration {
-    public function up()
+return new class extends Migration
+{
+    public function up(): void
     {
         Schema::create('employees', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            $table->foreignId('agency_id')->nullable()->constrained()->onDelete('set null');
-            $table->foreignId('employer_id')->nullable()->constrained()->onDelete('set null');
-            $table->string('position')->nullable();
-            $table->decimal('pay_rate', 8, 2)->nullable();
-            $table->json('availability')->nullable();
+            $table->string('national_insurance_number')->nullable();
+            $table->date('date_of_birth')->nullable();
+            $table->string('emergency_contact_name')->nullable();
+            $table->string('emergency_contact_phone')->nullable();
             $table->json('qualifications')->nullable();
-            $table->string('employment_type')->default('temp');
+            $table->json('certifications')->nullable();
             $table->string('status')->default('active');
             $table->json('meta')->nullable();
             $table->timestamps();
+
+            $table->index(['user_id']);
+            $table->index(['national_insurance_number']);
+            $table->index(['status']);
+            $table->index(['date_of_birth']);
         });
     }
 
-    public function down()
+    public function down(): void
     {
         Schema::dropIfExists('employees');
     }

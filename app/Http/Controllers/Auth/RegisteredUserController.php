@@ -17,10 +17,19 @@ class RegisteredUserController extends Controller
     {
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:' . User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'role' => ['required', 'string', 'in:employee,employer_admin,agency_admin,contact'],
             'phone' => ['sometimes', 'string', 'max:20'],
+            'address_line1' => ['sometimes', 'string', 'max:255'],
+            'address_line2' => ['sometimes', 'string', 'max:255'],
+            'city' => ['sometimes', 'string', 'max:100'],
+            'county' => ['sometimes', 'string', 'max:100'],
+            'postcode' => ['sometimes', 'string', 'max:20'],
+            'country' => ['sometimes', 'string', 'size:2'],
+            'date_of_birth' => ['sometimes', 'date'],
+            'emergency_contact_name' => ['sometimes', 'string', 'max:255'],
+            'emergency_contact_phone' => ['sometimes', 'string', 'max:20'],
         ]);
 
         $user = User::create([
@@ -29,6 +38,15 @@ class RegisteredUserController extends Controller
             'password' => Hash::make($request->password),
             'role' => $request->role,
             'phone' => $request->phone ?? null,
+            'address_line1' => $request->address_line1 ?? null,
+            'address_line2' => $request->address_line2 ?? null,
+            'city' => $request->city ?? null,
+            'county' => $request->county ?? null,
+            'postcode' => $request->postcode ?? null,
+            'country' => $request->country ?? 'GB',
+            'date_of_birth' => $request->date_of_birth ?? null,
+            'emergency_contact_name' => $request->emergency_contact_name ?? null,
+            'emergency_contact_phone' => $request->emergency_contact_phone ?? null,
             'status' => 'active',
             'last_login_at' => now(),
         ]);
@@ -42,6 +60,7 @@ class RegisteredUserController extends Controller
             'user' => $user,
             'permissions' => $this->getUserPermissions($user),
             'profile_complete' => $user->has_complete_profile,
+            'address_complete' => $user->has_complete_address,
             'message' => 'Registration successful'
         ], 201);
     }

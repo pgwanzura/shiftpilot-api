@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\EmployeeAvailability;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -670,57 +671,44 @@ class ShiftPilotSeeder extends Seeder
     {
         $availabilities = [];
         $now = Carbon::now();
-        $days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+        $patterns = [
+            ['days' => EmployeeAvailability::WEEKDAYS, 'start' => '09:00', 'end' => '17:00', 'type' => 'preferred'],
+            ['days' => EmployeeAvailability::WEEKDAYS, 'start' => '17:00', 'end' => '22:00', 'type' => 'available'],
+            ['days' => EmployeeAvailability::WEEKENDS, 'start' => '08:00', 'end' => '16:00', 'type' => 'available'],
+            ['days' => EmployeeAvailability::ALL_WEEK, 'start' => '06:00', 'end' => '18:00', 'type' => 'available'],
+            ['days' => EmployeeAvailability::MONDAY + EmployeeAvailability::WEDNESDAY + EmployeeAvailability::FRIDAY, 'start' => '10:00', 'end' => '15:00', 'type' => 'preferred']
+        ];
 
         for ($employeeId = 1; $employeeId <= 100; $employeeId++) {
-            $numSlots = rand(3, 10);
-            $preferredDays = array_rand($days, rand(3, 5));
-            if (!is_array($preferredDays)) $preferredDays = [$preferredDays];
+            $numPatterns = rand(1, 3);
+            $selectedPatterns = array_rand($patterns, $numPatterns);
+            if (!is_array($selectedPatterns)) $selectedPatterns = [$selectedPatterns];
 
-            foreach ($preferredDays as $dayIndex) {
-                $day = $days[$dayIndex];
+            foreach ($selectedPatterns as $patternIndex) {
+                $pattern = $patterns[$patternIndex];
+
                 $availabilities[] = [
                     'employee_id' => $employeeId,
-                    'type' => 'recurring',
-                    'day_of_week' => $day,
-                    'start_date' => null,
-                    'end_date' => null,
-                    'start_time' => $this->generateTime(6, 10),
-                    'end_time' => $this->generateTime(14, 18),
-                    'timezone' => 'Europe/London',
-                    'status' => 'available',
-                    'priority' => rand(1, 10),
-                    'location_preference' => json_encode(['radius_km' => rand(10, 50)]),
-                    'max_shift_length_hours' => rand(8, 12),
-                    'min_shift_length_hours' => rand(4, 6),
-                    'notes' => 'Preferred working hours',
-                    'created_at' => $now->copy()->subMonths(rand(1, 6)),
-                    'updated_at' => $now,
-                ];
-            }
-
-            if (rand(0, 10) > 7) {
-                $startDate = $now->copy()->addDays(rand(30, 90));
-                $availabilities[] = [
-                    'employee_id' => $employeeId,
-                    'type' => 'one_time',
-                    'day_of_week' => null,
-                    'start_date' => $startDate->format('Y-m-d'),
-                    'end_date' => $startDate->copy()->addDays(rand(7, 14))->format('Y-m-d'),
-                    'start_time' => '09:00',
-                    'end_time' => '17:00',
-                    'timezone' => 'Europe/London',
-                    'status' => 'available',
-                    'priority' => 8,
-                    'notes' => 'Special availability for project work',
+                    'start_date' => $now->copy()->subMonths(1)->format('Y-m-d'),
+                    'end_date' => $now->copy()->addMonths(6)->format('Y-m-d'),
+                    'days_mask' => $pattern['days'],
+                    'start_time' => $pattern['start'],
+                    'end_time' => $pattern['end'],
+                    'type' => $pattern['type'],
+                    'priority' => $pattern['type'] === 'preferred' ? 8 : 5,
+                    'max_hours' => rand(6, 10),
+                    'flexible' => rand(0, 1),
+                    'constraints' => json_encode(['max_commute' => rand(10, 50)]),
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];
             }
         }
 
-        DB::table('employee_availabilities')->insert($availabilities);
-        $this->command->info('Created ' . count($availabilities) . ' availability records');
+        foreach (array_chunk($availabilities, 100) as $chunk) {
+            DB::table('employee_availabilities')->insert($chunk);
+        }
     }
 
     private function createTimeOffRequests()

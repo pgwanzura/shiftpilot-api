@@ -9,27 +9,32 @@ class TimeOffRequest extends Model
 {
     use HasFactory;
 
-    protected $table = 'time_off_requests';
+    const STATUS_PENDING = 'pending';
+    const STATUS_APPROVED = 'approved';
+    const STATUS_REJECTED = 'rejected';
+
+    const TYPE_VACATION = 'vacation';
+    const TYPE_SICK = 'sick';
+    const TYPE_PERSONAL = 'personal';
+    const TYPE_BEREAVEMENT = 'bereavement';
+    const TYPE_OTHER = 'other';
 
     protected $fillable = [
         'employee_id',
-        'type',
+        'agency_id',
         'start_date',
         'end_date',
-        'start_time',
-        'end_time',
-        'status',
+        'type',
         'reason',
+        'status',
         'approved_by_id',
-        'approved_at',
-        'attachments'
+        'approved_at'
     ];
 
     protected $casts = [
-        'start_time' => 'datetime',
-        'end_time' => 'datetime',
-        'approved_at' => 'datetime',
-        'attachments' => 'array'
+        'start_date' => 'date',
+        'end_date' => 'date',
+        'approved_at' => 'datetime'
     ];
 
     public function employee()
@@ -37,16 +42,56 @@ class TimeOffRequest extends Model
         return $this->belongsTo(Employee::class);
     }
 
+    public function agency()
+    {
+        return $this->belongsTo(Agency::class);
+    }
+
     public function approvedBy()
     {
         return $this->belongsTo(User::class, 'approved_by_id');
     }
 
-    public function scopeWhereBetweenDates($query, string $startDate, string $endDate)
+    public function scopePending($query)
     {
-        return $query->where(function ($query) use ($startDate, $endDate) {
-            $query->whereBetween('start_date', [$startDate, $endDate])
-                ->orWhereBetween('end_date', [$startDate, $endDate]);
-        });
+        return $query->where('status', self::STATUS_PENDING);
+    }
+
+    public function scopeApproved($query)
+    {
+        return $query->where('status', self::STATUS_APPROVED);
+    }
+
+    public function scopeForAgency($query, $agencyId)
+    {
+        return $query->where('agency_id', $agencyId);
+    }
+
+    public function isPending()
+    {
+        return $this->status === self::STATUS_PENDING;
+    }
+
+    public function isApproved()
+    {
+        return $this->status === self::STATUS_APPROVED;
+    }
+
+    public function approve($approvedBy)
+    {
+        $this->update([
+            'status' => self::STATUS_APPROVED,
+            'approved_by_id' => $approvedBy->id,
+            'approved_at' => now(),
+        ]);
+    }
+
+    public function reject($approvedBy)
+    {
+        $this->update([
+            'status' => self::STATUS_REJECTED,
+            'approved_by_id' => $approvedBy->id,
+            'approved_at' => now(),
+        ]);
     }
 }

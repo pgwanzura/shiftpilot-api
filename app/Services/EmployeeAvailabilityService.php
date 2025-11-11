@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Contracts\AvailabilityServiceInterface;
 use App\Models\Employee;
 use App\Models\EmployeeAvailability;
 use App\Models\TimeOffRequest;
@@ -10,58 +11,95 @@ use App\Http\Requests\TimeOffRequestRequest;
 use App\Events\AvailabilityUpdated;
 use App\Events\TimeOffRequested;
 use App\Events\TimeOffApproved;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\Collection;
 
-class EmployeeAvailabilityService
+class EmployeeAvailabilityService implements AvailabilityServiceInterface
 {
-    public function updateAvailability(Employee $employee, EmployeeAvailabilityRequest $request): void
+    public function __construct(
+        private ConflictDetectionService $conflictService
+    ) {}
+
+    public function updateAvailability(Employee $employee, array $availabilityData): void
     {
-        // Clear existing availability and create new ones
-        $employee->employeeAvailabilities()->delete();
+        DB::transaction(function () use ($employee, $availabilityData) {
+            $employee->employeeAvailabilities()->delete();
 
-        foreach ($request->availabilities as $availabilityData) {
-            EmployeeAvailability::create(array_merge($availabilityData, [
-                'employee_id' => $employee->id,
-            ]));
-        }
+            $availabilities = collect($availabilityData)->map(function ($data) use ($employee) {
+                return $this->createAvailabilityRecord($employee, $data);
+            });
 
-        event(new AvailabilityUpdated($employee));
+            event(new AvailabilityUpdated($employee, $availabilities));
+        });
     }
 
-    public function requestTimeOff(Employee $employee, TimeOffRequestRequest $request): TimeOffRequest
+    private function createAvailabilityRecord(Employee $employee, array $data): EmployeeAvailability
     {
-        $timeOffRequest = TimeOffRequest::create(array_merge($request->validated(), [
+        return EmployeeAvailability::create([
             'employee_id' => $employee->id,
-            'status' => 'pending',
-        ]));
-
-        event(new TimeOffRequested($timeOffRequest));
-
-        return $timeOffRequest;
-    }
-
-    public function approveTimeOff(TimeOffRequest $timeOffRequest, $approvedBy): void
-    {
-        $timeOffRequest->update([
-            'status' => 'approved',
-            'approved_by_id' => $approvedBy->id,
-            'approved_at' => now(),
+            'start_date' => $data['start_date'],
+            'end_date' => $data['end_date'] ?? null,
+            'days_mask' => $data['days_mask'],
+            'start_time' => $data['start_time'],
+            'end_time' => $data['end_time'],
+            'type' => $data['type'],
+            'priority' => $data['priority'] ?? 5,
+            'max_hours' => $data['max_hours'] ?? null,
+            'flexible' => $data['flexible'] ?? false,
+            'constraints' => $data['constraints'] ?? null,
         ]);
-
-        event(new TimeOffApproved($timeOffRequest));
     }
 
-    public function checkAvailabilityConflicts(Employee $employee, $startDate, $endDate)
+    public function requestTimeOff(Employee $employee, array $timeOffData): TimeOffRequest
     {
-        return $employee->shifts()
-            ->where(function ($query) use ($startDate, $endDate) {
-                $query->whereBetween('start_time', [$startDate, $endDate])
-                      ->orWhereBetween('end_time', [$startDate, $endDate])
-                      ->orWhere(function ($q) use ($startDate, $endDate) {
-                          $q->where('start_time', '<=', $startDate)
-                            ->where('end_time', '>=', $endDate);
-                      });
+        return DB::transaction(function () use ($employee, $timeOffData) {
+            $timeOffRequest = TimeOffRequest::create([
+                'employee_id' => $employee->id,
+                'start_date' => $timeOffData['start_date'],
+                'end_date' => $timeOffData['end_date'],
+                'type' => $timeOffData['type'],
+                'reason' => $timeOffData['reason'] ?? null,
+                'status' => TimeOffRequest::STATUS_PENDING,
+            ]);
+
+            event(new TimeOffRequested($timeOffRequest));
+
+            return $timeOffRequest;
+        });
+    }
+
+    public function approveTimeOff(TimeOffRequest $timeOffRequest, int $approvedById): void
+    {
+        DB::transaction(function () use ($timeOffRequest, $approvedById) {
+            $timeOffRequest->update([
+                'status' => TimeOffRequest::STATUS_APPROVED,
+                'approved_by_id' => $approvedById,
+                'approved_at' => now(),
+            ]);
+
+            event(new TimeOffApproved($timeOffRequest));
+        });
+    }
+
+    public function checkAvailabilityConflicts(Employee $employee, string $startDate, string $endDate): Collection
+    {
+        return $this->conflictService->findConflictingShifts($employee, $startDate, $endDate);
+    }
+
+    public function findAvailableEmployees(\DateTime $start, \DateTime $end): Collection
+    {
+        return EmployeeAvailability::forShift($start, $end)
+            ->available()
+            ->with(['employee' => function ($query) {
+                $query->where('status', Employee::STATUS_ACTIVE);
+            }])
+            ->get()
+            ->filter(function ($availability) use ($start, $end) {
+                return $availability->canWorkShift($start, $end);
             })
-            ->whereIn('status', ['assigned', 'offered'])
-            ->get();
+            ->map(function ($availability) {
+                return $availability->employee;
+            })
+            ->unique();
     }
 }

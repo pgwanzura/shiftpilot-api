@@ -11,7 +11,7 @@ use App\Http\Controllers\Auth\{
 use App\Http\Controllers\{
     UserController,
     AgencyController,
-    PlacementController,
+    AssignmentController,
     CalendarEventsController
 };
 use Illuminate\Support\Facades\Route;
@@ -29,36 +29,21 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::post('email/verification-notification', [EmailVerificationNotificationController::class, 'store'])->name('verification.send');
 
-    Route::prefix('employer')->group(function () {
-        Route::prefix('placements')->group(function () {
-            Route::get('/', [PlacementController::class, 'index']);
-            Route::get('/stats', [PlacementController::class, 'stats']);
-            Route::post('/', [PlacementController::class, 'store']);
-            Route::get('/{placement}', [PlacementController::class, 'show']);
-            Route::put('/{placement}', [PlacementController::class, 'update']);
-            Route::delete('/{placement}', [PlacementController::class, 'destroy']);
-            Route::post('/{placement}/activate', [PlacementController::class, 'activate']);
-            Route::post('/{placement}/close', [PlacementController::class, 'close']);
-            Route::post('/{placement}/cancel', [PlacementController::class, 'cancel']);
-        });
+    Route::apiResource('assignments', AssignmentController::class);
+
+    Route::prefix('assignments')->group(function () {
+        Route::patch('{assignment}/status', [AssignmentController::class, 'changeStatus']);
+        Route::post('{assignment}/complete', [AssignmentController::class, 'complete']);
+        Route::post('{assignment}/suspend', [AssignmentController::class, 'suspend']);
+        Route::post('{assignment}/reactivate', [AssignmentController::class, 'reactivate']);
+        Route::post('{assignment}/cancel', [AssignmentController::class, 'cancel']);
+        Route::post('{assignment}/extend', [AssignmentController::class, 'extend']);
+        Route::get('statistics', [AssignmentController::class, 'statistics']);
+        Route::get('my-assignments', [AssignmentController::class, 'myAssignments']);
     });
 
-    Route::prefix('agency')->group(function () {
-        Route::get('/dashboard/stats', [AgencyController::class, 'getDashboardStats']);
-        Route::prefix('placements')->group(function () {
-            Route::get('/', [PlacementController::class, 'index']);
-            Route::get('/{placement}', [PlacementController::class, 'show']);
-            Route::get('/stats/detailed', [PlacementController::class, 'getPlacementStats']);
-        });
-    });
 
-    Route::prefix('admin')->group(function () {
-        Route::prefix('placements')->group(function () {
-            Route::get('/', [PlacementController::class, 'index']);
-            Route::get('/{placement}', [PlacementController::class, 'show']);
-            Route::delete('/{placement}', [PlacementController::class, 'destroy']);
-        });
-    });
+
 
     Route::prefix('calendar')->group(function () {
         // Main calendar events with enhanced filtering

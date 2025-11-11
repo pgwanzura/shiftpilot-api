@@ -4,18 +4,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | ShiftPilot - Complete Platform Configuration
+    | ShiftPilot - Refined Platform Configuration
     |--------------------------------------------------------------------------
     |
-    | One-stop config describing entities, validations, relationships,
-    | permissions, billing, payouts, tax, webhooks, events, flows and platform
-    | operational knobs required to run in production.
+    | CORE PRINCIPLE: Employees are ONLY linked to Employers through Agencies.
+    | All assignments flow through the Agency-Employee relationship.
     |
     */
 
     'meta' => [
         'name' => 'ShiftPilot',
-        'version' => '1.0.0',
+        'version' => '2.1.0',
         'currency' => 'GBP',
         'default_timezone' => 'UTC+01:00',
         'audit_retention_days' => 365,
@@ -24,17 +23,14 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | ENTITIES
+    | ENTITIES - REFINED STRUCTURE
     |--------------------------------------------------------------------------
-    | Each entity contains fields, validation rules, relationships (for
-    | automated generation), and policy_rules (high level). Use these to
-    | scaffold migrations, models, resources and policies.
     */
     'entities' => [
 
         /*
         |--------------------------------------------------------------------------
-        | User (base)
+        | User (base authentication)
         |--------------------------------------------------------------------------
         */
         'user' => [
@@ -44,10 +40,19 @@ return [
                 'name' => ['type' => 'string', 'nullable' => false],
                 'email' => ['type' => 'string', 'nullable' => false, 'unique' => true],
                 'password' => ['type' => 'string', 'nullable' => false],
-                'role' => ['type' => 'string', 'nullable' => false, 'default' => 'employee'], // super_admin, agency_admin, agent, employer_admin, manager, contact, employee
+                'role' => ['type' => 'string', 'nullable' => false, 'default' => 'employee'],
                 'phone' => ['type' => 'string', 'nullable' => true],
+                'address_line1' => ['type' => 'string', 'nullable' => true],
+                'address_line2' => ['type' => 'string', 'nullable' => true],
+                'city' => ['type' => 'string', 'nullable' => true],
+                'county' => ['type' => 'string', 'nullable' => true],
+                'postcode' => ['type' => 'string', 'nullable' => true],
+                'country' => ['type' => 'string', 'nullable' => true, 'default' => 'GB'],
+                'latitude' => ['type' => 'decimal', 'precision' => 10, 'scale' => 8, 'nullable' => true],
+                'longitude' => ['type' => 'decimal', 'precision' => 11, 'scale' => 8, 'nullable' => true],
+
                 'status' => ['type' => 'string', 'nullable' => false, 'default' => 'active'],
-                'meta' => ['type' => 'json', 'nullable' => true], // preferences, 2FA, etc
+                'meta' => ['type' => 'json', 'nullable' => true],
                 'email_verified_at' => ['type' => 'timestamp', 'nullable' => true],
                 'last_login_at' => ['type' => 'timestamp', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp', 'nullable' => true],
@@ -57,23 +62,35 @@ return [
                 'name' => 'required|string|max:255',
                 'email' => 'required|email|max:255|unique:users,email',
                 'password' => 'required|string|min:8',
-                'role' => 'required|in:super_admin,agency_admin,agent,employer_admin,manager,contact,employee',
+                'role' => 'required|in:super_admin,agency_admin,agent,employer_admin,contact,employee',
                 'status' => 'required|in:active,inactive,suspended',
+                'address_line1' => 'nullable|string|max:255',
+                'address_line2' => 'nullable|string|max:255',
+                'city' => 'nullable|string|max:100',
+                'county' => 'nullable|string|max:100',
+                'postcode' => 'nullable|string|max:20',
+                'country' => 'nullable|string|size:2',
+                'latitude' => 'nullable|numeric|between:-90,90',
+                'longitude' => 'nullable|numeric|between:-180,180',
             ],
             'relationships' => [
-                ['type' => 'morphOne', 'related' => 'Profile', 'name' => 'profile'], // polymorphic profile (Employer / Agency / Employee / Agent / Contact)
+                ['type' => 'morphOne', 'related' => 'Profile', 'name' => 'profile'],
             ],
-            'policy_rules' => [
-                'create' => ['super_admin'],
-                'view' => ['super_admin', 'self', 'related:profile.owner'],
-                'update' => ['super_admin', 'self'],
-                'delete' => ['super_admin']
+            'indexes' => [
+                ['fields' => ['postcode']],
+                ['fields' => ['city']],
+                ['fields' => ['country']],
+                ['fields' => ['latitude', 'longitude']],
+            ],
+            'business_rules' => [
+                'address_validation' => 'If any address field is provided, address_line1 and postcode are required',
+                'geocoding' => 'Latitude/longitude should be automatically geocoded from address when possible',
             ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Agency
+        | Agency (staffing company)
         |--------------------------------------------------------------------------
         */
         'agency' => [
@@ -88,9 +105,9 @@ return [
                 'address' => ['type' => 'string', 'nullable' => true],
                 'city' => ['type' => 'string', 'nullable' => true],
                 'country' => ['type' => 'string', 'nullable' => true],
-                'commission_rate' => ['type' => 'decimal', 'precision' => 5, 'scale' => 2, 'default' => 10.00], // percent
+                'default_markup_percent' => ['type' => 'decimal', 'precision' => 5, 'scale' => 2, 'default' => 15.00],
                 'subscription_status' => ['type' => 'string', 'default' => 'active'],
-                'meta' => ['type' => 'json', 'nullable' => true], // payment provider settings, business hours
+                'meta' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
@@ -98,27 +115,20 @@ return [
                 'user_id' => 'required|exists:users,id',
                 'name' => 'required|string|max:255',
                 'billing_email' => 'nullable|email',
-                'commission_rate' => 'nullable|numeric|min:0|max:100'
             ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'User'],
                 ['type' => 'hasMany', 'related' => 'Agent'],
-                ['type' => 'hasMany', 'related' => 'Employee'],
-                ['type' => 'hasMany', 'related' => 'EmployerAgencyLink'],
+                ['type' => 'hasMany', 'related' => 'AgencyEmployee'],
+                ['type' => 'hasMany', 'related' => 'EmployerAgencyContract'],
                 ['type' => 'hasMany', 'related' => 'Invoice'],
                 ['type' => 'hasMany', 'related' => 'Payroll']
             ],
-            'policy_rules' => [
-                'create' => ['super_admin'],
-                'view' => ['super_admin', 'related:user'],
-                'update' => ['super_admin', 'related:user'],
-                'delete' => ['super_admin']
-            ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Agent (agency user acting on behalf)
+        | Agent (agency staff member)
         |--------------------------------------------------------------------------
         */
         'agent' => [
@@ -142,67 +152,65 @@ return [
                 ['type' => 'belongsTo', 'related' => 'Agency'],
                 ['type' => 'belongsTo', 'related' => 'User']
             ],
-            'policy_rules' => [
-                'create' => ['agency_admin', 'super_admin'],
-                'view' => ['agency_admin', 'super_admin'],
-                'update' => ['agency_admin', 'super_admin'],
-                'delete' => ['agency_admin', 'super_admin']
-            ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Employer (client)
+        | Employer (client company)
         |--------------------------------------------------------------------------
         */
         'employer' => [
             'table' => 'employers',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'user_id' => ['type' => 'foreign', 'references' => 'users,id'],
                 'name' => ['type' => 'string'],
+                'legal_name' => ['type' => 'string', 'nullable' => true],
+                'registration_number' => ['type' => 'string', 'nullable' => true],
                 'billing_email' => ['type' => 'string', 'nullable' => true],
-                'address' => ['type' => 'string', 'nullable' => true],
+                'phone' => ['type' => 'string', 'nullable' => true],
+                'website' => ['type' => 'string', 'nullable' => true],
+                'address_line1' => ['type' => 'string', 'nullable' => true],
+                'address_line2' => ['type' => 'string', 'nullable' => true],
                 'city' => ['type' => 'string', 'nullable' => true],
-                'country' => ['type' => 'string', 'nullable' => true],
-                'subscription_status' => ['type' => 'string', 'default' => 'active'],
+                'county' => ['type' => 'string', 'nullable' => true],
+                'postcode' => ['type' => 'string', 'nullable' => true],
+                'country' => ['type' => 'string', 'nullable' => true, 'default' => 'GB'],
+                'industry' => ['type' => 'string', 'nullable' => true],
+                'company_size' => ['type' => 'string', 'nullable' => true],
+                'status' => ['type' => 'string', 'default' => 'active'],
                 'meta' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
             'validation' => [
-                'user_id' => 'required|exists:users,id',
                 'name' => 'required|string|max:255',
-                'billing_email' => 'nullable|email'
+                'billing_email' => 'nullable|email',
+                'phone' => 'nullable|string|max:20',
+                'website' => 'nullable|url',
+                'status' => 'required|in:active,inactive,suspended'
             ],
             'relationships' => [
-                ['type' => 'belongsTo', 'related' => 'User'],
+                ['type' => 'hasMany', 'related' => 'EmployerUser'], 
                 ['type' => 'hasMany', 'related' => 'Contact'],
                 ['type' => 'hasMany', 'related' => 'Location'],
-                ['type' => 'hasMany', 'related' => 'Shift'],
-                ['type' => 'hasMany', 'related' => 'EmployerAgencyLink'],
-                ['type' => 'hasMany', 'related' => 'Invoice']
+                ['type' => 'hasMany', 'related' => 'ShiftRequest'],
+                ['type' => 'hasMany', 'related' => 'EmployerAgencyContract'],
             ],
-            'policy_rules' => [
-                'create' => ['super_admin', 'agency_admin'],
-                'view' => ['super_admin', 'related:user', 'related:agency'],
-                'update' => ['super_admin', 'related:user', 'related:agency'],
-                'delete' => ['super_admin']
-            ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Employer Agency Link (contract)
+        | Employer-Agency Contract
+        | Establishes the business relationship and terms between employer and agency
         |--------------------------------------------------------------------------
         */
-        'employer_agency_link' => [
-            'table' => 'employer_agency_links',
+        'employer_agency_contract' => [
+            'table' => 'employer_agency_contracts',
             'fields' => [
                 'id' => ['type' => 'increments'],
                 'employer_id' => ['type' => 'foreign', 'references' => 'employers,id'],
                 'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
-                'status' => ['type' => 'string', 'default' => 'pending'], // pending, approved, suspended, terminated
+                'status' => ['type' => 'string', 'default' => 'pending'],
                 'contract_document_url' => ['type' => 'string', 'nullable' => true],
                 'contract_start' => ['type' => 'date', 'nullable' => true],
                 'contract_end' => ['type' => 'date', 'nullable' => true],
@@ -213,22 +221,21 @@ return [
             'validation' => [
                 'employer_id' => 'required|exists:employers,id',
                 'agency_id' => 'required|exists:agencies,id',
+                'status' => 'required|in:pending,active,suspended,terminated'
             ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'Employer'],
-                ['type' => 'belongsTo', 'related' => 'Agency']
+                ['type' => 'belongsTo', 'related' => 'Agency'],
+                ['type' => 'hasMany', 'related' => 'Assignment']
             ],
-            'policy_rules' => [
-                'create' => ['agency_admin', 'employer_admin', 'super_admin'],
-                'view' => ['agency_admin', 'employer_admin', 'super_admin'],
-                'update' => ['agency_admin', 'employer_admin', 'super_admin'],
-                'delete' => ['super_admin']
+            'indexes' => [
+                ['fields' => ['employer_id', 'agency_id'], 'unique' => true]
             ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Contact (employer-side approver/manager)
+        | Contact (employer-side manager/approver)
         |--------------------------------------------------------------------------
         */
         'contact' => [
@@ -240,32 +247,30 @@ return [
                 'name' => ['type' => 'string'],
                 'email' => ['type' => 'string'],
                 'phone' => ['type' => 'string', 'nullable' => true],
-                'role' => ['type' => 'string', 'default' => 'manager'], // manager, approver, supervisor
-                'can_sign_timesheets' => ['type' => 'boolean', 'default' => false],
+                'role' => ['type' => 'string', 'default' => 'manager'],
+                'can_approve_timesheets' => ['type' => 'boolean', 'default' => true],
+                'can_approve_assignments' => ['type' => 'boolean', 'default' => true],
                 'meta' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
             'validation' => [
                 'employer_id' => 'required|exists:employers,id',
+                'user_id' => 'nullable|exists:users,id',
                 'email' => 'required|email',
-                'name' => 'required|string'
+                'name' => 'required|string',
+                'role' => 'sometimes|in:admin,manager,approver,viewer',
+                'phone' => 'nullable|string|max:20'
             ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'Employer'],
                 ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'user_id']
             ],
-            'policy_rules' => [
-                'create' => ['employer_admin', 'super_admin'],
-                'view' => ['employer_admin', 'super_admin', 'related:employer'],
-                'update' => ['employer_admin', 'super_admin'],
-                'delete' => ['super_admin']
-            ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Location (employer site)
+        | Location (employer work site)
         |--------------------------------------------------------------------------
         */
         'location' => [
@@ -274,32 +279,55 @@ return [
                 'id' => ['type' => 'increments'],
                 'employer_id' => ['type' => 'foreign', 'references' => 'employers,id'],
                 'name' => ['type' => 'string'],
-                'address' => ['type' => 'string', 'nullable' => true],
-                'latitude' => ['type' => 'decimal', 'precision' => 10, 'scale' => 6, 'nullable' => true],
-                'longitude' => ['type' => 'decimal', 'precision' => 10, 'scale' => 6, 'nullable' => true],
-                'meta' => ['type' => 'json', 'nullable' => true], // parking, entry instructions
+                'address_line1' => ['type' => 'string', 'nullable' => true],
+                'address_line2' => ['type' => 'string', 'nullable' => true],
+                'city' => ['type' => 'string', 'nullable' => true],
+                'county' => ['type' => 'string', 'nullable' => true],
+                'postcode' => ['type' => 'string', 'nullable' => true],
+                'country' => ['type' => 'string', 'nullable' => true, 'default' => 'GB'],
+                'latitude' => ['type' => 'decimal', 'precision' => 10, 'scale' => 8, 'nullable' => true],
+                'longitude' => ['type' => 'decimal', 'precision' => 11, 'scale' => 8, 'nullable' => true],
+                'location_type' => ['type' => 'string', 'nullable' => true],
+                'contact_name' => ['type' => 'string', 'nullable' => true],
+                'contact_phone' => ['type' => 'string', 'nullable' => true],
+                'instructions' => ['type' => 'text', 'nullable' => true], 
+                
+                'meta' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
             'validation' => [
                 'employer_id' => 'required|exists:employers,id',
-                'name' => 'required|string'
+                'name' => 'required|string|max:255',
+                'address_line1' => 'nullable|string|max:255',
+                'address_line2' => 'nullable|string|max:255',
+                'city' => 'nullable|string|max:100',
+                'county' => 'nullable|string|max:100',
+                'postcode' => 'nullable|string|max:20',
+                'country' => 'nullable|string|size:2',
+                'latitude' => 'nullable|numeric|between:-90,90',
+                'longitude' => 'nullable|numeric|between:-180,180',
+                'location_type' => 'nullable|in:office,warehouse,retail,construction,manufacturing,healthcare,education,other',
+                'contact_phone' => 'nullable|string|max:20'
             ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'Employer'],
+                ['type' => 'hasMany', 'related' => 'ShiftRequest'],
                 ['type' => 'hasMany', 'related' => 'Shift']
             ],
-            'policy_rules' => [
-                'create' => ['employer_admin', 'super_admin'],
-                'view' => ['employer_admin', 'super_admin', 'related:employer'],
-                'update' => ['employer_admin', 'super_admin'],
-                'delete' => ['super_admin']
+            'indexes' => [
+                ['fields' => ['employer_id', 'name']],
+                ['fields' => ['postcode']],
+                ['fields' => ['city']],
+                ['fields' => ['country']],
+                ['fields' => ['latitude', 'longitude']],
+                ['fields' => ['location_type']]
             ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Employee (worker)
+        | Employee (worker - NO direct employer_id)
         |--------------------------------------------------------------------------
         */
         'employee' => [
@@ -307,13 +335,12 @@ return [
             'fields' => [
                 'id' => ['type' => 'increments'],
                 'user_id' => ['type' => 'foreign', 'references' => 'users,id'],
-                'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id', 'nullable' => true],
-                'employer_id' => ['type' => 'foreign', 'references' => 'employers,id', 'nullable' => true], // direct-hire optional
-                'position' => ['type' => 'string', 'nullable' => true],
-                'pay_rate' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2, 'nullable' => true], // what the employee is paid
-                'availability' => ['type' => 'json', 'nullable' => true], // weekly availability patterns
-                'qualifications' => ['type' => 'json', 'nullable' => true], // skills, certificates
-                'employment_type' => ['type' => 'string', 'default' => 'temp'], // temp, perm, part_time
+                'national_insurance_number' => ['type' => 'string', 'nullable' => true],
+                'date_of_birth' => ['type' => 'date', 'nullable' => true],
+                'emergency_contact_name' => ['type' => 'string', 'nullable' => true],
+                'emergency_contact_phone' => ['type' => 'string', 'nullable' => true],
+                'qualifications' => ['type' => 'json', 'nullable' => true],
+                'certifications' => ['type' => 'json', 'nullable' => true],
                 'status' => ['type' => 'string', 'default' => 'active'],
                 'meta' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
@@ -321,31 +348,72 @@ return [
             ],
             'validation' => [
                 'user_id' => 'required|exists:users,id',
-                'agency_id' => 'nullable|exists:agencies,id',
-                'pay_rate' => 'nullable|numeric|min:0'
+                'status' => 'required|in:active,inactive,suspended'
             ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'User'],
-                ['type' => 'belongsTo', 'related' => 'Agency'],
-                ['type' => 'belongsTo', 'related' => 'Employer'],
-                ['type' => 'hasMany', 'related' => 'Placement'],
-                ['type' => 'hasMany', 'related' => 'Shift'],
-                ['type' => 'hasMany', 'related' => 'Timesheet'],
-                ['type' => 'hasMany', 'related' => 'Payroll'],
+                ['type' => 'hasMany', 'related' => 'AgencyEmployee'],
                 ['type' => 'hasMany', 'related' => 'EmployeeAvailability'],
-                ['type' => 'hasMany', 'related' => 'TimeOffRequest']
+                ['type' => 'hasMany', 'related' => 'TimeOffRequest'],
+                ['type' => 'hasMany', 'related' => 'Assignment'],
+                ['type' => 'hasMany', 'related' => 'Shift'],
+                ['type' => 'hasMany', 'related' => 'Timesheet']
             ],
-            'policy_rules' => [
-                'create' => ['agency_admin', 'super_admin'],
-                'view' => ['super_admin', 'related:agency', 'related:employer', 'self'],
-                'update' => ['super_admin', 'related:agency', 'related:employer', 'self'],
-                'delete' => ['super_admin']
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
+        | Agency-Employee Registration
+        | Links employees to agencies with agency-specific terms
+        | An employee can be registered with multiple agencies
+        |--------------------------------------------------------------------------
+        */
+        'agency_employee' => [
+            'table' => 'agency_employees',
+            'fields' => [
+                'id' => ['type' => 'increments'],
+                'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
+                'employee_id' => ['type' => 'foreign', 'references' => 'employees,id'],
+                'position' => ['type' => 'string', 'nullable' => true],
+                'pay_rate' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2],
+                'employment_type' => ['type' => 'string', 'default' => 'temp'],
+                'status' => ['type' => 'string', 'default' => 'active'],
+                'contract_start_date' => ['type' => 'date', 'nullable' => true],
+                'contract_end_date' => ['type' => 'date', 'nullable' => true],
+                'specializations' => ['type' => 'json', 'nullable' => true],
+                'preferred_locations' => ['type' => 'json', 'nullable' => true],
+                'max_weekly_hours' => ['type' => 'integer', 'nullable' => true],
+                'notes' => ['type' => 'text', 'nullable' => true],
+                'meta' => ['type' => 'json', 'nullable' => true],
+                'created_at' => ['type' => 'timestamp'],
+                'updated_at' => ['type' => 'timestamp']
+            ],
+            'validation' => [
+                'agency_id' => 'required|exists:agencies,id',
+                'employee_id' => 'required|exists:employees,id',
+                'pay_rate' => 'required|numeric|min:0',
+                'employment_type' => 'required|in:temp,contract,temp_to_perm',
+                'status' => 'required|in:active,inactive,suspended,terminated'
+            ],
+            'relationships' => [
+                ['type' => 'belongsTo', 'related' => 'Agency'],
+                ['type' => 'belongsTo', 'related' => 'Employee'],
+                ['type' => 'hasMany', 'related' => 'Assignment']
+            ],
+            'indexes' => [
+                ['fields' => ['agency_id', 'employee_id'], 'unique' => true],
+                ['fields' => ['employee_id', 'status']],
+                ['fields' => ['agency_id', 'status']]
+            ],
+            'business_rules' => [
+                'unique_active_registration' => 'Only one active registration per agency-employee pair',
+                'status_flow' => 'Can only move from active→inactive or active→suspended→terminated'
             ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Employee Availability (recurring and one-off availability)
+        | Employee Availability
         |--------------------------------------------------------------------------
         */
         'employee_availability' => [
@@ -353,113 +421,99 @@ return [
             'fields' => [
                 'id' => ['type' => 'increments'],
                 'employee_id' => ['type' => 'foreign', 'references' => 'employees,id'],
-                'type' => ['type' => 'string', 'default' => 'recurring'], // recurring, one_time
-                'day_of_week' => ['type' => 'string', 'nullable' => true], // mon, tue, wed, thu, fri, sat, sun
-                'start_date' => ['type' => 'date', 'nullable' => true], // for one_time type
-                'end_date' => ['type' => 'date', 'nullable' => true], // for one_time type
+                'start_date' => ['type' => 'date'],
+                'end_date' => ['type' => 'date', 'nullable' => true],
+                'days_mask' => ['type' => 'integer'],
                 'start_time' => ['type' => 'time'],
                 'end_time' => ['type' => 'time'],
-                'timezone' => ['type' => 'string', 'default' => 'UTC'],
-                'status' => ['type' => 'string', 'default' => 'available'], // available, unavailable, preferred
-                'priority' => ['type' => 'integer', 'default' => 1], // 1-10, higher = more preferred
-                'location_preference' => ['type' => 'json', 'nullable' => true], // preferred locations/areas
-                'max_shift_length_hours' => ['type' => 'integer', 'nullable' => true],
-                'min_shift_length_hours' => ['type' => 'integer', 'nullable' => true],
-                'notes' => ['type' => 'text', 'nullable' => true],
-                'created_at' => ['type' => 'timestamp'],
-                'updated_at' => ['type' => 'timestamp']
-            ],
-            'validation' => [
-                'employee_id' => 'required|exists:employees,id',
-                'start_time' => 'required|date_format:H:i',
-                'end_time' => 'required|date_format:H:i|after:start_time',
-                'type' => 'required|in:recurring,one_time'
-            ],
-            'relationships' => [
-                ['type' => 'belongsTo', 'related' => 'Employee']
-            ],
-            'policy_rules' => [
-                'create' => ['employee', 'agency_admin', 'super_admin'],
-                'view' => ['employee', 'agency_admin', 'super_admin'],
-                'update' => ['employee', 'agency_admin', 'super_admin'],
-                'delete' => ['employee', 'agency_admin', 'super_admin']
-            ]
-        ],
-
-        /*
-        |--------------------------------------------------------------------------
-        | Time Off Request (unavailability due to time off)
-        |--------------------------------------------------------------------------
-        */
-        'time_off_request' => [
-            'table' => 'time_off_requests',
-            'fields' => [
-                'id' => ['type' => 'increments'],
-                'employee_id' => ['type' => 'foreign', 'references' => 'employees,id'],
-                'type' => ['type' => 'string', 'default' => 'vacation'], // vacation, sick, personal, bereavement, other
-                'start_date' => ['type' => 'date'],
-                'end_date' => ['type' => 'date'],
-                'start_time' => ['type' => 'time', 'nullable' => true], // if partial day
-                'end_time' => ['type' => 'time', 'nullable' => true], // if partial day
-                'status' => ['type' => 'string', 'default' => 'pending'], // pending, approved, rejected, cancelled
-                'reason' => ['type' => 'text', 'nullable' => true],
-                'approved_by_id' => ['type' => 'foreign', 'references' => 'users,id', 'nullable' => true],
-                'approved_at' => ['type' => 'timestamp', 'nullable' => true],
-                'attachments' => ['type' => 'json', 'nullable' => true], // supporting documents
+                'type' => ['type' => 'string', 'default' => 'preferred'],
+                'priority' => ['type' => 'integer', 'default' => 1],
+                'max_hours' => ['type' => 'integer', 'nullable' => true],
+                'flexible' => ['type' => 'boolean', 'default' => false],
+                'constraints' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
             'validation' => [
                 'employee_id' => 'required|exists:employees,id',
                 'start_date' => 'required|date',
-                'end_date' => 'required|date|after_or_equal:start_date',
-                'type' => 'required|in:vacation,sick,personal,bereavement,other'
+                'end_date' => 'nullable|date|after_or_equal:start_date',
+                'days_mask' => 'required|integer|min:1|max:127',
+                'start_time' => 'required|date_format:H:i',
+                'end_time' => 'required|date_format:H:i|after:start_time',
+                'type' => 'required|in:preferred,available,unavailable'
             ],
             'relationships' => [
-                ['type' => 'belongsTo', 'related' => 'Employee'],
-                ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'approved_by_id']
+                ['type' => 'belongsTo', 'related' => 'Employee']
             ],
-            'policy_rules' => [
-                'create' => ['employee', 'agency_admin', 'super_admin'],
-                'view' => ['employee', 'agency_admin', 'super_admin'],
-                'update' => ['employee', 'agency_admin', 'super_admin'],
-                'delete' => ['employee', 'agency_admin', 'super_admin']
-            ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Placement (employee assigned to employer via agency)
+        | Time Off Request
         |--------------------------------------------------------------------------
         */
-        'placement' => [
-            'table' => 'placements',
+       'time_off_request' => [
+            'table' => 'time_off_requests',
+            'fields' => [
+                'id' => ['type' => 'increments'],
+                'employee_id' => ['type' => 'foreign', 'references' => 'employees,id'],
+                'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
+                'start_date' => ['type' => 'date'],
+                'end_date' => ['type' => 'date'],
+                'type' => ['type' => 'string', 'default' => 'vacation'],
+                'reason' => ['type' => 'text', 'nullable' => true],
+                'status' => ['type' => 'string', 'default' => 'pending'],
+                'approved_by_id' => ['type' => 'foreign', 'references' => 'users,id', 'nullable' => true],
+                'approved_at' => ['type' => 'timestamp', 'nullable' => true],
+                'created_at' => ['type' => 'timestamp'],
+                'updated_at' => ['type' => 'timestamp']
+            ],
+            'validation' => [
+                'employee_id' => 'required|exists:employees,id',
+                'agency_id' => 'required|exists:agencies,id',
+                'start_date' => 'required|date',
+                'end_date' => 'required|date|after_or_equal:start_date',
+                'type' => 'required|in:vacation,sick,personal,bereavement,other',
+                'status' => 'required|in:pending,approved,rejected'
+            ],
+            'relationships' => [
+                ['type' => 'belongsTo', 'related' => 'Employee'],
+                ['type' => 'belongsTo', 'related' => 'Agency'],
+                ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'approved_by_id']
+            ],
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
+        | Shift Request (from Employer)
+        | Represents employer's staffing need
+        | Agencies respond to these requests
+        |--------------------------------------------------------------------------
+        */
+        'shift_request' => [
+            'table' => 'shift_requests',
             'fields' => [
                 'id' => ['type' => 'increments'],
                 'employer_id' => ['type' => 'foreign', 'references' => 'employers,id'],
+                'location_id' => ['type' => 'foreign', 'references' => 'locations,id'],
                 'title' => ['type' => 'string'],
                 'description' => ['type' => 'text', 'nullable' => true],
-                'role_requirements' => ['type' => 'json'],
+                'role' => ['type' => 'string'],
                 'required_qualifications' => ['type' => 'json', 'nullable' => true],
                 'experience_level' => ['type' => 'string', 'default' => 'entry'],
                 'background_check_required' => ['type' => 'boolean', 'default' => false],
-                'location_id' => ['type' => 'foreign', 'references' => 'locations,id'],
-                'location_instructions' => ['type' => 'text', 'nullable' => true],
                 'start_date' => ['type' => 'date'],
                 'end_date' => ['type' => 'date', 'nullable' => true],
                 'shift_pattern' => ['type' => 'string', 'default' => 'one_time'],
                 'recurrence_rules' => ['type' => 'json', 'nullable' => true],
-                'budget_type' => ['type' => 'string', 'default' => 'hourly'],
-                'budget_amount' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
+                'max_hourly_rate' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
                 'currency' => ['type' => 'string', 'default' => 'GBP'],
-                'overtime_rules' => ['type' => 'json', 'nullable' => true],
+                'number_of_workers' => ['type' => 'integer', 'default' => 1],
                 'target_agencies' => ['type' => 'string', 'default' => 'all'],
                 'specific_agency_ids' => ['type' => 'json', 'nullable' => true],
                 'response_deadline' => ['type' => 'timestamp', 'nullable' => true],
                 'status' => ['type' => 'string', 'default' => 'draft'],
-                'selected_agency_id' => ['type' => 'foreign', 'references' => 'agencies,id', 'nullable' => true],
-                'selected_employee_id' => ['type' => 'foreign', 'references' => 'employees,id', 'nullable' => true],
-                'agreed_rate' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2, 'nullable' => true],
                 'created_by_id' => ['type' => 'foreign', 'references' => 'users,id'],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
@@ -469,129 +523,205 @@ return [
                 'title' => 'required|string|max:255',
                 'location_id' => 'required|exists:locations,id',
                 'start_date' => 'required|date',
-                'budget_amount' => 'required|numeric|min:0',
-                'target_agencies' => 'required|in:all,specific',
-                'status' => 'required|in:draft,active,filled,cancelled,completed'
+                'max_hourly_rate' => 'required|numeric|min:0',
+                'status' => 'required|in:draft,published,in_progress,filled,cancelled,completed'
             ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'Employer'],
                 ['type' => 'belongsTo', 'related' => 'Location'],
                 ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'created_by_id'],
-                ['type' => 'belongsTo', 'related' => 'Agency', 'foreign_key' => 'selected_agency_id'],
-                ['type' => 'belongsTo', 'related' => 'Employee', 'foreign_key' => 'selected_employee_id'],
                 ['type' => 'hasMany', 'related' => 'AgencyResponse'],
-                ['type' => 'hasMany', 'related' => 'Shift']
+                ['type' => 'hasMany', 'related' => 'Assignment']
             ],
-            'policy_rules' => [
-                'create' => ['employer_admin', 'super_admin'],
-                'view' => ['employer_admin', 'agency_admin', 'super_admin'],
-                'update' => ['employer_admin', 'super_admin'],
-                'delete' => ['super_admin']
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
+        | Agency Response (to Shift Request)
+        | Agencies submit proposals for shift requests
+        |--------------------------------------------------------------------------
+        */
+        'agency_response' => [
+            'table' => 'agency_responses',
+            'fields' => [
+                'id' => ['type' => 'increments'],
+                'shift_request_id' => ['type' => 'foreign', 'references' => 'shift_requests,id'],
+                'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
+                'proposed_employee_id' => ['type' => 'foreign', 'references' => 'employees,id', 'nullable' => true],
+                'proposed_rate' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
+                'markup_amount' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
+                'status' => ['type' => 'string', 'default' => 'pending'],
+                'notes' => ['type' => 'text', 'nullable' => true],
+                'submitted_by_id' => ['type' => 'foreign', 'references' => 'users,id'],
+                'responded_at' => ['type' => 'timestamp', 'nullable' => true],
+                'created_at' => ['type' => 'timestamp'],
+                'updated_at' => ['type' => 'timestamp']
+            ],
+            'validation' => [
+                'shift_request_id' => 'required|exists:shift_requests,id',
+                'agency_id' => 'required|exists:agencies,id',
+                'proposed_rate' => 'required|numeric|min:0',
+                'status' => 'required|in:pending,accepted,rejected,withdrawn'
+            ],
+            'relationships' => [
+                ['type' => 'belongsTo', 'related' => 'ShiftRequest'],
+                ['type' => 'belongsTo', 'related' => 'Agency'],
+                ['type' => 'belongsTo', 'related' => 'Employee', 'foreign_key' => 'proposed_employee_id'],
+                ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'submitted_by_id']
+            ],
+            'indexes' => [
+                ['fields' => ['shift_request_id', 'agency_id'], 'unique' => true]
             ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Shift
+        | Assignment (Active Employee-Employer Placement via Agency)
+        | Tracks the actual assignment of an agency employee to an employer
+        | This is created when an employer accepts an agency response
+        |--------------------------------------------------------------------------
+        */
+        'assignment' => [
+            'table' => 'assignments',
+            'fields' => [
+                'id' => ['type' => 'increments'],
+                'contract_id' => ['type' => 'foreign', 'references' => 'employer_agency_contracts,id'],
+                'agency_employee_id' => ['type' => 'foreign', 'references' => 'agency_employees,id'],
+                'shift_request_id' => ['type' => 'foreign', 'references' => 'shift_requests,id', 'nullable' => true],
+                'agency_response_id' => ['type' => 'foreign', 'references' => 'agency_responses,id', 'nullable' => true],
+                'location_id' => ['type' => 'foreign', 'references' => 'locations,id'],
+                'role' => ['type' => 'string'],
+                'start_date' => ['type' => 'date'],
+                'end_date' => ['type' => 'date', 'nullable' => true],
+                'expected_hours_per_week' => ['type' => 'integer', 'nullable' => true],
+                'agreed_rate' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
+                'pay_rate' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2],
+                'markup_amount' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
+                'markup_percent' => ['type' => 'decimal', 'precision' => 5, 'scale' => 2],
+                'status' => ['type' => 'string', 'default' => 'active'],
+                'assignment_type' => ['type' => 'string', 'default' => 'ongoing'],
+                'shift_pattern' => ['type' => 'json', 'nullable' => true],
+                'notes' => ['type' => 'text', 'nullable' => true],
+                'created_by_id' => ['type' => 'foreign', 'references' => 'users,id'],
+                'created_at' => ['type' => 'timestamp'],
+                'updated_at' => ['type' => 'timestamp']
+            ],
+            'validation' => [
+                'contract_id' => 'required|exists:employer_agency_contracts,id',
+                'agency_employee_id' => 'required|exists:agency_employees,id',
+                'location_id' => 'required|exists:locations,id',
+                'start_date' => 'required|date',
+                'agreed_rate' => 'required|numeric|min:0|gte:pay_rate',
+                'pay_rate' => 'required|numeric|min:0',
+                'status' => 'required|in:active,pending,completed,cancelled,suspended'
+            ],
+            'relationships' => [
+                ['type' => 'belongsTo', 'related' => 'EmployerAgencyContract', 'foreign_key' => 'contract_id'],
+                ['type' => 'belongsTo', 'related' => 'AgencyEmployee'],
+                ['type' => 'belongsTo', 'related' => 'ShiftRequest'],
+                ['type' => 'belongsTo', 'related' => 'AgencyResponse'],
+                ['type' => 'belongsTo', 'related' => 'Location'],
+                ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'created_by_id'],
+                ['type' => 'hasMany', 'related' => 'Shift']
+            ],
+            'indexes' => [
+                ['fields' => ['agency_employee_id', 'start_date', 'end_date']],
+                ['fields' => ['contract_id', 'status']],
+                ['fields' => ['agency_employee_id', 'status']]
+            ],
+            'business_rules' => [
+                'rate_validation' => 'agreed_rate must be >= pay_rate',
+                'markup_calculation' => 'markup_amount = agreed_rate - pay_rate, markup_percent = (markup_amount / pay_rate) * 100',
+                'contract_active' => 'Assignment requires active employer_agency_contract'
+            ]
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
+        | Shift (Actual work period within an assignment)
+        | Always linked to an assignment
+        | No direct employer/agency creation - must go through assignment
         |--------------------------------------------------------------------------
         */
         'shift' => [
             'table' => 'shifts',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'employer_id' => ['type' => 'foreign', 'references' => 'employers,id'],
-                'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id', 'nullable' => true],
-                'placement_id' => ['type' => 'foreign', 'references' => 'placements,id', 'nullable' => true],
-                'employee_id' => ['type' => 'foreign', 'references' => 'employees,id', 'nullable' => true],
-                'agent_id' => ['type' => 'foreign', 'references' => 'agents,id', 'nullable' => true],
+                'assignment_id' => ['type' => 'foreign', 'references' => 'assignments,id'],
                 'location_id' => ['type' => 'foreign', 'references' => 'locations,id'],
                 'start_time' => ['type' => 'timestamp'],
                 'end_time' => ['type' => 'timestamp'],
-                'hourly_rate' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2, 'nullable' => true], // if null -> use placement.client_rate
-                'status' => ['type' => 'string', 'default' => 'open'], // open, offered, assigned, completed, agency_approved, employer_approved, billed, cancelled
-                'created_by_type' => ['type' => 'string'], // employer / agency
-                'created_by_id' => ['type' => 'integer'],
-                'meta' => ['type' => 'json', 'nullable' => true],
+                'hourly_rate' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2],
+                'status' => ['type' => 'string', 'default' => 'scheduled'],
                 'notes' => ['type' => 'text', 'nullable' => true],
+                'meta' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
             'validation' => [
-                'employer_id' => 'required|exists:employers,id',
+                'assignment_id' => 'required|exists:assignments,id',
+                'location_id' => 'required|exists:locations,id',
                 'start_time' => 'required|date',
                 'end_time' => 'required|date|after:start_time',
-                'status' => 'required|in:open,offered,assigned,completed,agency_approved,employer_approved,billed,cancelled'
+                'status' => 'required|in:scheduled,in_progress,completed,cancelled,no_show'
             ],
             'relationships' => [
-                ['type' => 'belongsTo', 'related' => 'Employer'],
-                ['type' => 'belongsTo', 'related' => 'Agency'],
-                ['type' => 'belongsTo', 'related' => 'Placement'],
-                ['type' => 'belongsTo', 'related' => 'Employee'],
-                ['type' => 'belongsTo', 'related' => 'Agent'],
+                ['type' => 'belongsTo', 'related' => 'Assignment'],
                 ['type' => 'belongsTo', 'related' => 'Location'],
                 ['type' => 'hasOne', 'related' => 'Timesheet'],
                 ['type' => 'hasMany', 'related' => 'ShiftApproval']
             ],
-            'policy_rules' => [
-                'create' => ['employer_admin', 'agency_admin', 'super_admin'],
-                'view' => ['super_admin', 'related:employer_admin', 'related:agency_admin', 'related:employee', 'related:agent'],
-                'update' => ['employer_admin', 'agency_admin', 'super_admin'],
-                'delete' => ['super_admin']
+            'indexes' => [
+                ['fields' => ['assignment_id', 'start_time', 'end_time']],
+                ['fields' => ['start_time', 'end_time']]
+            ],
+            'business_rules' => [
+                'overlap_detection' => 'Must check for employee shift overlaps before creation',
+                'availability_check' => 'Must validate against employee availability',
+                'assignment_validation' => 'Must verify assignment is active'
             ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Shift Template (recurring shifts)
+        | Shift Template (for recurring shift generation)
         |--------------------------------------------------------------------------
         */
         'shift_template' => [
             'table' => 'shift_templates',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'employer_id' => ['type' => 'foreign', 'references' => 'employers,id'],
-                'location_id' => ['type' => 'foreign', 'references' => 'locations,id'],
+                'assignment_id' => ['type' => 'foreign', 'references' => 'assignments,id'],
                 'title' => ['type' => 'string'],
                 'description' => ['type' => 'text', 'nullable' => true],
-                'day_of_week' => ['type' => 'string'], // mon, tue, wed, thu, fri, sat, sun
+                'day_of_week' => ['type' => 'string'],
                 'start_time' => ['type' => 'time'],
                 'end_time' => ['type' => 'time'],
-                'role_requirement' => ['type' => 'string', 'nullable' => true],
-                'required_qualifications' => ['type' => 'json', 'nullable' => true],
-                'hourly_rate' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2, 'nullable' => true],
-                'recurrence_type' => ['type' => 'string', 'default' => 'weekly'], // weekly, biweekly, monthly
+                'recurrence_type' => ['type' => 'string', 'default' => 'weekly'],
                 'status' => ['type' => 'string', 'default' => 'active'],
-                'start_date' => ['type' => 'date', 'nullable' => true],
-                'end_date' => ['type' => 'date', 'nullable' => true],
-                'created_by_type' => ['type' => 'string'],
-                'created_by_id' => ['type' => 'integer'],
+                'effective_start_date' => ['type' => 'date', 'nullable' => true],
+                'effective_end_date' => ['type' => 'date', 'nullable' => true],
+                'last_generated_date' => ['type' => 'date', 'nullable' => true],
                 'meta' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
             'validation' => [
-                'employer_id' => 'required|exists:employers,id',
-                'location_id' => 'required|exists:locations,id',
+                'assignment_id' => 'required|exists:assignments,id',
                 'day_of_week' => 'required|in:mon,tue,wed,thu,fri,sat,sun',
                 'start_time' => 'required|date_format:H:i',
-                'end_time' => 'required|date_format:H:i|after:start_time'
+                'end_time' => 'required|date_format:H:i|after:start_time',
+                'recurrence_type' => 'required|in:weekly,biweekly,monthly'
             ],
             'relationships' => [
-                ['type' => 'belongsTo', 'related' => 'Employer'],
-                ['type' => 'belongsTo', 'related' => 'Location'],
-                ['type' => 'hasMany', 'related' => 'Shift']
+                ['type' => 'belongsTo', 'related' => 'Assignment']
             ],
-            'policy_rules' => [
-                'create' => ['employer_admin', 'agency_admin', 'super_admin'],
-                'view' => ['employer_admin', 'agency_admin', 'super_admin'],
-                'update' => ['employer_admin', 'agency_admin', 'super_admin'],
-                'delete' => ['employer_admin', 'agency_admin', 'super_admin']
-            ]
         ],
 
         /*
         |--------------------------------------------------------------------------
         | Shift Offer (agency offering shift to employee)
+        | Links to assignment instead of individual shift
         |--------------------------------------------------------------------------
         */
         'shift_offer' => [
@@ -599,9 +729,9 @@ return [
             'fields' => [
                 'id' => ['type' => 'increments'],
                 'shift_id' => ['type' => 'foreign', 'references' => 'shifts,id'],
-                'employee_id' => ['type' => 'foreign', 'references' => 'employees,id'],
-                'offered_by_id' => ['type' => 'foreign', 'references' => 'users,id'], // agent who offered
-                'status' => ['type' => 'string', 'default' => 'pending'], // pending, accepted, rejected, expired
+                'agency_employee_id' => ['type' => 'foreign', 'references' => 'agency_employees,id'],
+                'offered_by_id' => ['type' => 'foreign', 'references' => 'users,id'],
+                'status' => ['type' => 'string', 'default' => 'pending'],
                 'expires_at' => ['type' => 'timestamp'],
                 'responded_at' => ['type' => 'timestamp', 'nullable' => true],
                 'response_notes' => ['type' => 'text', 'nullable' => true],
@@ -610,25 +740,20 @@ return [
             ],
             'validation' => [
                 'shift_id' => 'required|exists:shifts,id',
-                'employee_id' => 'required|exists:employees,id',
-                'offered_by_id' => 'required|exists:users,id'
+                'agency_employee_id' => 'required|exists:agency_employees,id',
+                'offered_by_id' => 'required|exists:users,id',
+                'status' => 'required|in:pending,accepted,rejected,expired'
             ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'Shift'],
-                ['type' => 'belongsTo', 'related' => 'Employee'],
+                ['type' => 'belongsTo', 'related' => 'AgencyEmployee'],
                 ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'offered_by_id']
             ],
-            'policy_rules' => [
-                'create' => ['agency_admin', 'agent', 'super_admin'],
-                'view' => ['agency_admin', 'agent', 'employee', 'super_admin'],
-                'update' => ['employee', 'agency_admin', 'super_admin'],
-                'delete' => ['agency_admin', 'super_admin']
-            ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | ShiftApproval (who signed off; supports multiple approvers)
+        | Shift Approval (employer contact sign-off)
         |--------------------------------------------------------------------------
         */
         'shift_approval' => [
@@ -637,32 +762,27 @@ return [
                 'id' => ['type' => 'increments'],
                 'shift_id' => ['type' => 'foreign', 'references' => 'shifts,id'],
                 'contact_id' => ['type' => 'foreign', 'references' => 'contacts,id'],
-                'status' => ['type' => 'string', 'default' => 'pending'], // pending, approved, rejected
+                'status' => ['type' => 'string', 'default' => 'pending'],
                 'signed_at' => ['type' => 'timestamp', 'nullable' => true],
-                'signature_blob_url' => ['type' => 'string', 'nullable' => true], // saved signature image/pdf
+                'signature_blob_url' => ['type' => 'string', 'nullable' => true],
                 'notes' => ['type' => 'text', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
             'validation' => [
                 'shift_id' => 'required|exists:shifts,id',
-                'contact_id' => 'required|exists:contacts,id'
+                'contact_id' => 'required|exists:contacts,id',
+                'status' => 'required|in:pending,approved,rejected'
             ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'Shift'],
                 ['type' => 'belongsTo', 'related' => 'Contact']
             ],
-            'policy_rules' => [
-                'create' => ['employer_admin', 'contact', 'agent', 'super_admin'],
-                'view' => ['employer_admin', 'agency_admin', 'super_admin'],
-                'update' => ['employer_admin', 'agency_admin', 'super_admin'],
-                'delete' => ['super_admin']
-            ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Timesheet
+        | Timesheet (hours worked)
         |--------------------------------------------------------------------------
         */
         'timesheet' => [
@@ -670,130 +790,120 @@ return [
             'fields' => [
                 'id' => ['type' => 'increments'],
                 'shift_id' => ['type' => 'foreign', 'references' => 'shifts,id'],
-                'employee_id' => ['type' => 'foreign', 'references' => 'employees,id'],
                 'clock_in' => ['type' => 'timestamp', 'nullable' => true],
                 'clock_out' => ['type' => 'timestamp', 'nullable' => true],
                 'break_minutes' => ['type' => 'integer', 'default' => 0],
                 'hours_worked' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2, 'nullable' => true],
-                'status' => ['type' => 'string', 'default' => 'pending'], // pending, agency_approved, employer_approved, rejected
-                'agency_approved_by' => ['type' => 'foreign', 'references' => 'users,id', 'nullable' => true],
+                'status' => ['type' => 'string', 'default' => 'pending'],
+                'agency_approved_by_id' => ['type' => 'foreign', 'references' => 'users,id', 'nullable' => true],
                 'agency_approved_at' => ['type' => 'timestamp', 'nullable' => true],
-                'approved_by_contact_id' => ['type' => 'foreign', 'references' => 'contacts,id', 'nullable' => true],
-                'approved_at' => ['type' => 'timestamp', 'nullable' => true],
+                'employer_approved_by_id' => ['type' => 'foreign', 'references' => 'contacts,id', 'nullable' => true],
+                'employer_approved_at' => ['type' => 'timestamp', 'nullable' => true],
                 'notes' => ['type' => 'text', 'nullable' => true],
-                'attachments' => ['type' => 'json', 'nullable' => true], // photos, docs
+                'attachments' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
             'validation' => [
                 'shift_id' => 'required|exists:shifts,id',
-                'employee_id' => 'required|exists:employees,id'
+                'status' => 'required|in:pending,agency_approved,employer_approved,disputed,rejected'
             ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'Shift'],
-                ['type' => 'belongsTo', 'related' => 'Employee'],
-                ['type' => 'belongsTo', 'related' => 'Contact', 'foreign_key' => 'approved_by_contact_id']
+                ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'agency_approved_by_id'],
+                ['type' => 'belongsTo', 'related' => 'Contact', 'foreign_key' => 'employer_approved_by_id']
             ],
-            'policy_rules' => [
-                'create' => ['employee', 'system'],
-                'view' => ['super_admin', 'agency_admin', 'employer_admin', 'related:employee'],
-                'update' => ['agency_admin', 'employer_admin', 'super_admin'],
-                'delete' => ['super_admin']
-            ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Payroll (agency -> employee payments)
+        | Payroll (agency to employee payment)
         |--------------------------------------------------------------------------
         */
         'payroll' => [
             'table' => 'payrolls',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
-                'employee_id' => ['type' => 'foreign', 'references' => 'employees,id'],
+                'agency_employee_id' => ['type' => 'foreign', 'references' => 'agency_employees,id'],
                 'period_start' => ['type' => 'date'],
                 'period_end' => ['type' => 'date'],
                 'total_hours' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2],
                 'gross_pay' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
                 'taxes' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2, 'default' => 0.00],
+                'deductions' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2, 'default' => 0.00],
                 'net_pay' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
-                'status' => ['type' => 'string', 'default' => 'unpaid'], // unpaid, paid
+                'status' => ['type' => 'string', 'default' => 'pending'],
                 'paid_at' => ['type' => 'timestamp', 'nullable' => true],
                 'payout_id' => ['type' => 'foreign', 'references' => 'payouts,id', 'nullable' => true],
+                'payment_reference' => ['type' => 'string', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
             'validation' => [
-                'agency_id' => 'required|exists:agencies,id',
-                'employee_id' => 'required|exists:employees,id',
+                'agency_employee_id' => 'required|exists:agency_employees,id',
                 'period_start' => 'required|date',
                 'period_end' => 'required|date|after:period_start',
+                'status' => 'required|in:pending,processing,paid,failed'
             ],
             'relationships' => [
-                ['type' => 'belongsTo', 'related' => 'Agency'],
-                ['type' => 'belongsTo', 'related' => 'Employee'],
+                ['type' => 'belongsTo', 'related' => 'AgencyEmployee'],
                 ['type' => 'belongsTo', 'related' => 'Payout', 'foreign_key' => 'payout_id']
             ],
-            'policy_rules' => [
-                'create' => ['system', 'agency_admin'],
-                'view' => ['agency_admin', 'super_admin'],
-                'update' => ['agency_admin', 'super_admin'],
-                'delete' => ['super_admin']
-            ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Invoice (between parties and to ShiftPilot)
+        | Invoice (financial transactions)
+        | Types: employer_to_agency, agency_to_platform, employer_to_platform
         |--------------------------------------------------------------------------
         */
         'invoice' => [
             'table' => 'invoices',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'type' => ['type' => 'string'], // employer_to_agency, agency_to_shiftpilot, employer_to_shiftpilot, shiftpilot_refund
-                'from_type' => ['type' => 'string'], // employer / agency / shiftpilot
+                'type' => ['type' => 'string'],
+                'from_type' => ['type' => 'string'],
                 'from_id' => ['type' => 'integer'],
-                'to_type' => ['type' => 'string'], // employer / agency / shiftpilot
+                'to_type' => ['type' => 'string'],
                 'to_id' => ['type' => 'integer'],
-                'reference' => ['type' => 'string', 'nullable' => true], // invoice number
+                'reference' => ['type' => 'string', 'nullable' => false],
                 'line_items' => ['type' => 'json', 'nullable' => true],
                 'subtotal' => ['type' => 'decimal', 'precision' => 12, 'scale' => 2],
                 'tax_amount' => ['type' => 'decimal', 'precision' => 12, 'scale' => 2, 'default' => 0.00],
                 'total_amount' => ['type' => 'decimal', 'precision' => 12, 'scale' => 2],
-                'status' => ['type' => 'string', 'default' => 'pending'], // pending, paid, partial, overdue, cancelled
+                'status' => ['type' => 'string', 'default' => 'pending'],
                 'due_date' => ['type' => 'date'],
                 'paid_at' => ['type' => 'timestamp', 'nullable' => true],
-                'payment_reference' => ['type' => 'string', 'nullable' => true], // payment id
+                'payment_reference' => ['type' => 'string', 'nullable' => true],
                 'metadata' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
             'validation' => [
-                'type' => 'required|string',
+                'type' => 'required|in:employer_to_agency,agency_to_platform,employer_to_platform',
                 'from_type' => 'required|string',
                 'to_type' => 'required|string',
                 'subtotal' => 'required|numeric|min:0',
                 'total_amount' => 'required|numeric|min:0',
-                'due_date' => 'required|date'
+                'due_date' => 'required|date',
+                'status' => 'required|in:pending,paid,partial,overdue,cancelled'
             ],
             'relationships' => [
-                ['type' => 'morphTo', 'related' => 'Billable'], // from/to polymorphic references
+                ['type' => 'morphTo', 'name' => 'from'],
+                ['type' => 'morphTo', 'name' => 'to'],
                 ['type' => 'hasMany', 'related' => 'Payment']
             ],
-            'policy_rules' => [
-                'create' => ['system', 'agency_admin', 'employer_admin', 'super_admin'],
-                'view' => ['related:from', 'related:to', 'super_admin'],
-                'update' => ['super_admin'],
-                'delete' => ['super_admin']
+            'indexes' => [
+                ['fields' => ['reference'], 'unique' => true],
+                ['fields' => ['from_type', 'from_id']],
+                ['fields' => ['to_type', 'to_id']],
+                ['fields' => ['status', 'due_date']]
             ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Payment (records of payments)
+        | Payment (payment records)
         |--------------------------------------------------------------------------
         */
         'payment' => [
@@ -801,13 +911,13 @@ return [
             'fields' => [
                 'id' => ['type' => 'increments'],
                 'invoice_id' => ['type' => 'foreign', 'references' => 'invoices,id'],
-                'payer_type' => ['type' => 'string'], // agency, employer, shiftpilot
+                'payer_type' => ['type' => 'string'],
                 'payer_id' => ['type' => 'integer'],
                 'amount' => ['type' => 'decimal', 'precision' => 12, 'scale' => 2],
-                'method' => ['type' => 'string'], // stripe, bacs, sepa, paypal
-                'processor_id' => ['type' => 'string', 'nullable' => true], // stripe payment id or bank transaction id
-                'status' => ['type' => 'string', 'default' => 'completed'], // completed, failed, pending, refunded
-                'fee_amount' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2, 'default' => 0.00], // processing fees
+                'method' => ['type' => 'string'],
+                'processor_id' => ['type' => 'string', 'nullable' => true],
+                'status' => ['type' => 'string', 'default' => 'completed'],
+                'fee_amount' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2, 'default' => 0.00],
                 'net_amount' => ['type' => 'decimal', 'precision' => 12, 'scale' => 2],
                 'metadata' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
@@ -815,22 +925,19 @@ return [
             ],
             'validation' => [
                 'invoice_id' => 'required|exists:invoices,id',
-                'amount' => 'required|numeric|min:0'
+                'amount' => 'required|numeric|min:0',
+                'method' => 'required|in:stripe,bacs,sepa,paypal,bank_transfer',
+                'status' => 'required|in:pending,completed,failed,refunded'
             ],
             'relationships' => [
-                ['type' => 'belongsTo', 'related' => 'Invoice']
+                ['type' => 'belongsTo', 'related' => 'Invoice'],
+                ['type' => 'morphTo', 'name' => 'payer']
             ],
-            'policy_rules' => [
-                'create' => ['system', 'super_admin'],
-                'view' => ['related:invoice', 'super_admin'],
-                'update' => ['super_admin'],
-                'delete' => ['super_admin']
-            ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Payout (aggregated pay runs from agency to employees)
+        | Payout (batch payroll processing)
         |--------------------------------------------------------------------------
         */
         'payout' => [
@@ -841,34 +948,41 @@ return [
                 'period_start' => ['type' => 'date'],
                 'period_end' => ['type' => 'date'],
                 'total_amount' => ['type' => 'decimal', 'precision' => 12, 'scale' => 2],
-                'status' => ['type' => 'string', 'default' => 'processing'], // processing, paid, failed
+                'employee_count' => ['type' => 'integer'],
+                'status' => ['type' => 'string', 'default' => 'processing'],
                 'provider_payout_id' => ['type' => 'string', 'nullable' => true],
                 'metadata' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
+            'validation' => [
+                'agency_id' => 'required|exists:agencies,id',
+                'period_start' => 'required|date',
+                'period_end' => 'required|date|after:period_start',
+                'status' => 'required|in:processing,paid,failed,cancelled'
+            ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'Agency'],
                 ['type' => 'hasMany', 'related' => 'Payroll']
-            ]
+            ],
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Subscription (ShiftPilot plans)
+        | Subscription (platform subscriptions)
         |--------------------------------------------------------------------------
         */
         'subscription' => [
             'table' => 'subscriptions',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'entity_type' => ['type' => 'string'], // employer, agency
+                'entity_type' => ['type' => 'string'],
                 'entity_id' => ['type' => 'integer'],
-                'plan_key' => ['type' => 'string'], // e.g. agency_pro, employer_basic
+                'plan_key' => ['type' => 'string'],
                 'plan_name' => ['type' => 'string'],
                 'amount' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2],
-                'interval' => ['type' => 'string', 'default' => 'monthly'], // monthly, yearly
-                'status' => ['type' => 'string', 'default' => 'active'], // active, past_due, cancelled
+                'interval' => ['type' => 'string', 'default' => 'monthly'],
+                'status' => ['type' => 'string', 'default' => 'active'],
                 'started_at' => ['type' => 'timestamp'],
                 'current_period_start' => ['type' => 'timestamp', 'nullable' => true],
                 'current_period_end' => ['type' => 'timestamp', 'nullable' => true],
@@ -880,59 +994,32 @@ return [
                 'entity_type' => 'required|in:agency,employer',
                 'entity_id' => 'required|integer',
                 'plan_key' => 'required|string',
-                'amount' => 'required|numeric|min:0'
+                'amount' => 'required|numeric|min:0',
+                'status' => 'required|in:active,past_due,cancelled,suspended'
             ],
             'relationships' => [
-                ['type' => 'morphTo', 'related' => 'Subscriber']
+                ['type' => 'morphTo', 'name' => 'subscriber']
             ],
-            'policy_rules' => [
-                'create' => ['system', 'super_admin'],
-                'view' => ['related:subscriber', 'super_admin'],
-                'update' => ['related:subscriber', 'super_admin'],
-                'delete' => ['super_admin']
-            ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Platform Billing Settings
-        |--------------------------------------------------------------------------
-        */
-        'platform_billing' => [
-            'table' => 'platform_billing',
-            'fields' => [
-                'id' => ['type' => 'increments'],
-                'commission_rate' => ['type' => 'decimal', 'precision' => 5, 'scale' => 2, 'default' => 2.00], // platform commission % per shift
-                'transaction_fee_flat' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2, 'default' => 0.30],
-                'transaction_fee_percent' => ['type' => 'decimal', 'precision' => 5, 'scale' => 2, 'default' => 2.9],
-                'payout_schedule_days' => ['type' => 'integer', 'default' => 7], // default payout lag for agencies
-                'tax_vat_rate_percent' => ['type' => 'decimal', 'precision' => 5, 'scale' => 2, 'default' => 0.00],
-                'created_at' => ['type' => 'timestamp'],
-                'updated_at' => ['type' => 'timestamp']
-            ],
-            'validation' => [
-                'commission_rate' => 'required|numeric|min:0|max:100'
-            ]
-        ],
-
-        /*
-        |--------------------------------------------------------------------------
-        | Rate Card (per role/location/time)
+        | Rate Card (pricing rules)
         |--------------------------------------------------------------------------
         */
         'rate_card' => [
             'table' => 'rate_cards',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'employer_id' => ['type' => 'foreign', 'references' => 'employers,id', 'nullable' => true], // employer-specific override
-                'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id', 'nullable' => true], // agency-specific
-                'role_key' => ['type' => 'string'], // nurse, chef, driver
+                'employer_id' => ['type' => 'foreign', 'references' => 'employers,id', 'nullable' => true],
+                'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id', 'nullable' => true],
+                'role_key' => ['type' => 'string'],
                 'location_id' => ['type' => 'foreign', 'references' => 'locations,id', 'nullable' => true],
-                'day_of_week' => ['type' => 'string', 'nullable' => true], // Mon, Tue... null => all
+                'day_of_week' => ['type' => 'string', 'nullable' => true],
                 'start_time' => ['type' => 'time', 'nullable' => true],
                 'end_time' => ['type' => 'time', 'nullable' => true],
                 'rate' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2],
-                'currency' => ['type' => 'string', 'default' => 'USD'],
+                'currency' => ['type' => 'string', 'default' => 'GBP'],
                 'effective_from' => ['type' => 'date', 'nullable' => true],
                 'effective_to' => ['type' => 'date', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
@@ -951,14 +1038,14 @@ return [
 
         /*
         |--------------------------------------------------------------------------
-        | Audit Log (immutable)
+        | Audit Log
         |--------------------------------------------------------------------------
         */
         'audit_log' => [
             'table' => 'audit_logs',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'actor_type' => ['type' => 'string'], // user, system
+                'actor_type' => ['type' => 'string'],
                 'actor_id' => ['type' => 'integer', 'nullable' => true],
                 'action' => ['type' => 'string'],
                 'target_type' => ['type' => 'string', 'nullable' => true],
@@ -968,143 +1055,530 @@ return [
                 'user_agent' => ['type' => 'string', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp']
             ],
-            'retention_days' => env('AUDIT_RETENTION_DAYS', 365)
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Notification (in-app + email + sms)
+        | Notification
         |--------------------------------------------------------------------------
         */
         'notification' => [
             'table' => 'notifications',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'recipient_type' => ['type' => 'string'], // user, agency, employer
+                'recipient_type' => ['type' => 'string'],
                 'recipient_id' => ['type' => 'integer'],
-                'channel' => ['type' => 'string', 'default' => 'in_app'], // email, sms, in_app
+                'channel' => ['type' => 'string', 'default' => 'in_app'],
                 'template_key' => ['type' => 'string'],
                 'payload' => ['type' => 'json', 'nullable' => true],
                 'is_read' => ['type' => 'boolean', 'default' => false],
                 'sent_at' => ['type' => 'timestamp', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
-            ]
+            ],
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Webhook Subscriptions (for external systems)
+        | Webhook Subscription
         |--------------------------------------------------------------------------
         */
         'webhook_subscription' => [
             'table' => 'webhook_subscriptions',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'owner_type' => ['type' => 'string'], // agency, employer
+                'owner_type' => ['type' => 'string'],
                 'owner_id' => ['type' => 'integer'],
                 'url' => ['type' => 'string'],
-                'events' => ['type' => 'json'], // e.g. ["shift.assigned","timesheet.approved"]
+                'events' => ['type' => 'json'],
                 'secret' => ['type' => 'string'],
                 'status' => ['type' => 'string', 'default' => 'active'],
                 'last_delivery_at' => ['type' => 'timestamp', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
-            ]
+            ],
         ],
-    ], // end entities
+    ],
 
     /*
     |--------------------------------------------------------------------------
-    | ROLES & PERMISSIONS
+    | BUSINESS RULES & CONSTRAINTS
     |--------------------------------------------------------------------------
-    | Fine-grained permission definitions to map to gates/policies and UI.
     */
-    'user_roles' => [
-        'super_admin' => [
-            'label' => 'Super Admin',
-            'description' => 'Full access to everything',
-            'permissions' => ['*']
+    'business_rules' => [
+        'core_relationship_model' => [
+            'rule' => 'ALL employee-employer relationships MUST be mediated through agency_employees → assignments',
+            'enforcement' => 'Database constraints + application validation',
+            'description' => 'No direct employee-employer relationships allowed'
         ],
-        'agency_admin' => [
-            'label' => 'Agency Admin',
-            'description' => 'Manage agency, staff, placements, payroll, invoices',
-            'permissions' => [
-                'employee:*',
-                'agent:*',
-                'placement:*',
-                'shift:*',
-                'timesheet:*',
-                'invoice:view,create',
-                'payroll:create,view',
-                'payout:view',
-                'webhook:manage',
-                'subscription:view',
-                'availability:view,manage',
-                'time_off:approve'
-            ]
+        'assignment_prerequisites' => [
+            'rule' => 'Assignment requires: active EmployerAgencyContract + active AgencyEmployee + valid Location',
+            'enforcement' => 'Foreign key constraints + application validation',
+            'description' => 'Cannot assign employee without valid contract and agency registration'
         ],
-        'agent' => [
-            'label' => 'Agent',
-            'description' => 'Assign staff and manage shifts on behalf of agency',
-            'permissions' => [
-                'shift:create,view,update',
-                'placement:create,view',
-                'timesheet:view',
-                'invoice:view',
-                'availability:view',
-                'employee:view'
-            ]
+        'employee_availability_scope' => [
+            'rule' => 'Employee availability and time-off apply across ALL agencies',
+            'enforcement' => 'Global validation checks',
+            'description' => 'Prevents double-booking regardless of agency'
         ],
-        'employer_admin' => [
-            'label' => 'Employer Admin',
-            'description' => 'Create shift requests, approve timesheets, pay invoices, manage contacts',
-            'permissions' => [
-                'shift:create,view,update',
-                'contact:manage',
-                'timesheet:approve,view',
-                'invoice:view,create,pay',
-                'shift_template:manage'
-            ]
+        'shift_overlap_prevention' => [
+            'rule' => 'Employee cannot have overlapping shifts across ALL assignments and agencies',
+            'enforcement' => 'Application validation before shift creation',
+            'query' => 'Check shifts across all agency_employee relationships',
+            'description' => 'Global overlap prevention for employee time'
         ],
-        'contact' => [
-            'label' => 'Employer Contact',
-            'description' => 'Can sign off/approve shifts and timesheets',
-            'permissions' => [
-                'timesheet:approve',
-                'shift:approve'
-            ]
+        'assignment_overlap_prevention' => [
+            'rule' => 'Employee cannot have overlapping active assignments',
+            'enforcement' => 'Application validation before assignment creation',
+            'description' => 'Prevents conflicting long-term placements across agencies'
         ],
-        'employee' => [
-            'label' => 'Employee',
-            'description' => 'Worker; sees assigned shifts and can clock-in/out',
-            'permissions' => [
-                'shift:view:own',
-                'timesheet:create:own',
-                'timesheet:view:own',
-                'availability:manage:own',
-                'time_off:request'
-            ]
+        'multi_agency_employee_management' => [
+            'rule' => 'Employee can have multiple active agency relationships with independent terms',
+            'enforcement' => 'Application logic',
+            'description' => 'Support flexible staffing across multiple agencies'
         ],
-        'system' => [
-            'label' => 'System',
-            'description' => 'Internal automated processes and webhooks',
-            'permissions' => [
-                'timesheet:create',
-                'invoice:create',
-                'payment:record',
-                'subscription:manage',
-                'shift:generate_from_template'
-            ]
+        'rate_integrity' => [
+            'rule' => 'Assignment agreed_rate >= pay_rate, markup calculated automatically',
+            'enforcement' => 'Application validation + database triggers',
+            'description' => 'Ensures proper financial structure'
         ]
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | AVAILABILITY & SCHEDULING CONFIGURATION
+    | DATA FLOW: Employer → Assignment → Shift
+    |--------------------------------------------------------------------------
+    */
+    'data_flow' => [
+        'employee_registration' => [
+            '1' => 'Employee creates base profile (no employer context)',
+            '2' => 'Agency registers employee via agency_employees with agency-specific terms',
+            '3' => 'Employee can be registered with multiple agencies simultaneously',
+            '4' => 'Each agency-employee relationship has independent pay rates and terms'
+        ],
+
+        'assignment_creation' => [
+            '1' => 'Employer creates ShiftRequest for staffing need',
+            '2' => 'Agencies with active contracts can view and respond',
+            '3' => 'Agency submits AgencyResponse with proposed employee and rates',
+            '4' => 'Employer selects preferred response',
+            '5' => 'System creates Assignment linking AgencyEmployee to Employer via Contract',
+            '6' => 'Assignment validates no global conflicts for employee',
+            '7' => 'Shifts generated within assignment boundaries'
+        ],
+
+        'multi_agency_scenario' => [
+            'employee_john' => [
+                'registered_with' => ['Agency A', 'Agency B'],
+                'assignment_agency_a' => 'Employer X (Mon-Wed)',
+                'assignment_agency_b' => 'Employer Y (Thu-Fri)',
+                'validation' => 'System prevents overlapping shifts across both assignments'
+            ]
+        ],
+
+        'financial_flow' => [
+            '1' => 'Employee works shifts, timesheets created',
+            '2' => 'Timesheets approved by employer contact',
+            '3' => 'Invoice generated (Employer → Agency) for agreed_rate × hours',
+            '4' => 'Employer pays invoice to agency',
+            '5' => 'Agency processes payroll (Agency → Employee) for pay_rate × hours',
+            '6' => 'Platform commission invoiced (Agency → Platform)',
+            '7' => 'Each agency manages payroll independently for their employees'
+        ]
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATION HELPERS
+    |--------------------------------------------------------------------------
+    */
+    'validation_queries' => [
+        'check_global_shift_overlap' => "
+            SELECT COUNT(*) FROM shifts s
+            JOIN assignments a ON s.assignment_id = a.id
+            JOIN agency_employees ae ON a.agency_employee_id = ae.id
+            WHERE ae.employee_id = :employee_id
+            AND s.id != :exclude_shift_id
+            AND s.start_time < :new_end_time
+            AND s.end_time > :new_start_time
+            AND s.status NOT IN ('cancelled', 'no_show')
+        ",
+
+        'check_global_assignment_overlap' => "
+            SELECT COUNT(*) FROM assignments a
+            JOIN agency_employees ae ON a.agency_employee_id = ae.id
+            WHERE ae.employee_id = :employee_id
+            AND a.id != :exclude_assignment_id
+            AND a.status = 'active'
+            AND a.start_date <= COALESCE(:new_end_date, '9999-12-31')
+            AND (a.end_date IS NULL OR a.end_date >= :new_start_date)
+        ",
+
+        'get_employee_agency_context' => "
+            SELECT
+                ae.id as agency_employee_id,
+                ae.agency_id,
+                a.name as agency_name,
+                ae.pay_rate,
+                ae.status as agency_status,
+                ae.employment_type
+            FROM agency_employees ae
+            JOIN agencies a ON ae.agency_id = a.id
+            WHERE ae.employee_id = :employee_id
+            AND ae.status = 'active'
+        ",
+
+        'get_available_employees_for_shift_global' => "
+            SELECT DISTINCT
+                e.*,
+                ae.id as agency_employee_id,
+                ae.agency_id,
+                ae.pay_rate as agency_pay_rate
+            FROM employees e
+            JOIN agency_employees ae ON e.id = ae.employee_id
+            WHERE ae.agency_id = :agency_id
+            AND ae.status = 'active'
+            AND e.status = 'active'
+            AND e.id NOT IN (
+                -- Exclude employees with overlapping shifts (any agency)
+                SELECT ae2.employee_id
+                FROM agency_employees ae2
+                JOIN assignments a ON ae2.id = a.agency_employee_id
+                JOIN shifts s ON a.id = s.assignment_id
+                WHERE s.start_time < :shift_end_time
+                AND s.end_time > :shift_start_time
+                AND s.status NOT IN ('cancelled', 'no_show')
+            )
+            AND e.id NOT IN (
+                -- Exclude employees with approved time off
+                SELECT employee_id FROM time_off_requests
+                WHERE status = 'approved'
+                AND start_date <= :shift_end_date
+                AND end_date >= :shift_start_date
+            )
+            AND e.id NOT IN (
+                -- Exclude employees who have declined this shift previously
+                SELECT so.agency_employee_id
+                FROM shift_offers so
+                JOIN shifts s ON so.shift_id = s.id
+                WHERE so.agency_employee_id = ae.id
+                AND s.assignment_id = :assignment_id
+                AND so.status = 'rejected'
+            )
+        ",
+
+        'calculate_employee_utilization' => "
+            SELECT
+                e.id as employee_id,
+                ae.agency_id,
+                COUNT(DISTINCT a.id) as active_assignments,
+                COUNT(DISTINCT s.id) as scheduled_shifts,
+                SUM(EXTRACT(EPOCH FROM (s.end_time - s.start_time))/3600 as scheduled_hours
+            FROM employees e
+            JOIN agency_employees ae ON e.id = ae.employee_id
+            LEFT JOIN assignments a ON ae.id = a.agency_employee_id AND a.status = 'active'
+            LEFT JOIN shifts s ON a.id = s.assignment_id
+                AND s.status IN ('scheduled', 'in_progress')
+                AND s.start_time >= :period_start
+                AND s.end_time <= :period_end
+            WHERE e.id = :employee_id
+            GROUP BY e.id, ae.agency_id
+        "
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | REFINED EVENTS
+    |--------------------------------------------------------------------------
+    */
+    'events' => [
+        'shift_request.created' => ['description' => 'Employer created shift request'],
+        'shift_request.published' => ['description' => 'Shift request made available to agencies'],
+        'agency_response.submitted' => ['description' => 'Agency submitted proposal for shift request'],
+        'agency_response.accepted' => ['description' => 'Employer accepted agency proposal'],
+        'agency_response.rejected' => ['description' => 'Employer rejected agency proposal'],
+        'assignment.created' => ['description' => 'Employee assigned to employer via agency'],
+        'assignment.completed' => ['description' => 'Assignment period ended'],
+        'assignment.cancelled' => ['description' => 'Assignment cancelled'],
+        'shift.created' => ['description' => 'Shift scheduled for assignment'],
+        'shift.completed' => ['description' => 'Employee completed shift'],
+        'shift.cancelled' => ['description' => 'Shift cancelled'],
+        'shift_offer.sent' => ['description' => 'Agency offered shift to employee'],
+        'shift_offer.accepted' => ['description' => 'Employee accepted shift offer'],
+        'shift_offer.rejected' => ['description' => 'Employee rejected shift offer'],
+        'timesheet.submitted' => ['description' => 'Timesheet submitted'],
+        'timesheet.agency_approved' => ['description' => 'Agency approved timesheet'],
+        'timesheet.employer_approved' => ['description' => 'Employer approved timesheet'],
+        'invoice.generated' => ['description' => 'Invoice created'],
+        'invoice.paid' => ['description' => 'Invoice payment received'],
+        'payroll.generated' => ['description' => 'Payroll records created'],
+        'payout.processed' => ['description' => 'Payout batch processed'],
+        'availability.updated' => ['description' => 'Employee availability updated'],
+        'time_off.requested' => ['description' => 'Employee requested time off'],
+        'time_off.approved' => ['description' => 'Time off request approved'],
+        'time_off.rejected' => ['description' => 'Time off request rejected'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | REFINED FLOWS
+    |--------------------------------------------------------------------------
+    */
+    'flows' => [
+        /*
+        |--------------------------------------------------------------------------
+        | Shift Request → Assignment → Shift Lifecycle
+        |--------------------------------------------------------------------------
+        */
+        'full_shift_lifecycle' => [
+            [
+                'step' => 'employer_creates_shift_request',
+                'actor' => 'employer_admin',
+                'emit' => 'shift_request.created',
+                'jobs' => ['ValidateShiftRequest', 'IdentifyEligibleAgencies'],
+                'notifications' => []
+            ],
+            [
+                'step' => 'employer_publishes_request',
+                'actor' => 'employer_admin',
+                'emit' => 'shift_request.published',
+                'jobs' => ['NotifyAgencies', 'SetResponseDeadline'],
+                'notifications' => ['shift_request.published:agency']
+            ],
+            [
+                'step' => 'agency_submits_response',
+                'actor' => 'agent',
+                'emit' => 'agency_response.submitted',
+                'jobs' => ['ValidateProposedEmployee', 'CalculateMarkup', 'CheckAvailability'],
+                'notifications' => ['agency_response.submitted:employer']
+            ],
+            [
+                'step' => 'employer_accepts_response',
+                'actor' => 'employer_admin',
+                'emit' => 'agency_response.accepted',
+                'jobs' => ['CreateAssignment', 'GenerateShifts', 'NotifyAgency'],
+                'notifications' => ['agency_response.accepted:agency', 'assignment.created:employee']
+            ],
+            [
+                'step' => 'employee_works_shift',
+                'actor' => 'employee',
+                'emit' => 'shift.completed',
+                'jobs' => ['CreateTimesheet', 'CalculateHours'],
+                'notifications' => ['timesheet.submitted:agency']
+            ],
+            [
+                'step' => 'agency_approves_timesheet',
+                'actor' => 'agent',
+                'emit' => 'timesheet.agency_approved',
+                'jobs' => ['ValidateHours', 'NotifyEmployer'],
+                'notifications' => ['timesheet.agency_approved:employer']
+            ],
+            [
+                'step' => 'employer_approves_timesheet',
+                'actor' => 'contact',
+                'emit' => 'timesheet.employer_approved',
+                'jobs' => ['FinalizeTimesheet', 'GenerateInvoice'],
+                'notifications' => ['timesheet.employer_approved:agency', 'invoice.generated:employer']
+            ],
+            [
+                'step' => 'employer_pays_invoice',
+                'actor' => 'employer_admin',
+                'emit' => 'invoice.paid',
+                'jobs' => ['RecordPayment', 'CalculatePlatformFee', 'TriggerPayroll'],
+                'notifications' => ['invoice.paid:agency']
+            ],
+            [
+                'step' => 'agency_processes_payroll',
+                'actor' => 'system',
+                'emit' => 'payroll.generated',
+                'jobs' => ['CreatePayrollRecords', 'CalculateTaxes'],
+                'notifications' => ['payroll.generated:employee']
+            ],
+            [
+                'step' => 'agency_executes_payout',
+                'actor' => 'system',
+                'emit' => 'payout.processed',
+                'jobs' => ['BatchPayments', 'UpdatePayrollStatus'],
+                'notifications' => ['payout.processed:employee']
+            ],
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
+        | Employee Multi-Agency Registration
+        |--------------------------------------------------------------------------
+        */
+        'employee_multi_agency' => [
+            [
+                'step' => 'employee_registers_with_agency_a',
+                'actor' => 'agency_admin',
+                'emit' => null,
+                'jobs' => ['CreateAgencyEmployee', 'ValidateCredentials'],
+                'notifications' => ['registration.complete:employee']
+            ],
+            [
+                'step' => 'employee_registers_with_agency_b',
+                'actor' => 'agency_admin',
+                'emit' => null,
+                'jobs' => ['CreateAgencyEmployee', 'ValidateCredentials', 'CheckExistingRegistrations'],
+                'notifications' => ['registration.complete:employee']
+            ],
+            [
+                'step' => 'agency_a_assigns_to_employer_x',
+                'actor' => 'agent',
+                'emit' => 'assignment.created',
+                'jobs' => ['CreateAssignment', 'ValidateNoConflicts'],
+                'notifications' => ['assignment.created:employee', 'assignment.created:employer']
+            ],
+            [
+                'step' => 'agency_b_attempts_assign_to_employer_y',
+                'actor' => 'agent',
+                'emit' => null,
+                'jobs' => ['ValidateNoOverlap', 'CreateAssignment'],
+                'notifications' => ['assignment.created:employee']
+            ],
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
+        | Availability and Time Off Management
+        |--------------------------------------------------------------------------
+        */
+        'availability_management' => [
+            [
+                'step' => 'employee_sets_availability',
+                'actor' => 'employee',
+                'emit' => 'availability.updated',
+                'jobs' => ['ValidateAvailability', 'UpdateEmployeeCalendar'],
+                'notifications' => ['availability.updated:agency']
+            ],
+            [
+                'step' => 'employee_requests_time_off',
+                'actor' => 'employee',
+                'emit' => 'time_off.requested',
+                'jobs' => ['CheckShiftConflicts', 'NotifyRelevantAgencies'],
+                'notifications' => ['time_off.requested:agency']
+            ],
+            [
+                'step' => 'agency_reviews_time_off',
+                'actor' => 'agency_admin',
+                'emit' => 'time_off.approved',
+                'jobs' => ['ApproveTimeOff', 'BlockDates', 'CheckAffectedShifts'],
+                'notifications' => ['time_off.approved:employee', 'time_off.impact:employer']
+            ],
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
+        | Conflict Prevention
+        |--------------------------------------------------------------------------
+        */
+        'shift_validation' => [
+            [
+                'step' => 'validate_before_shift_creation',
+                'actor' => 'system',
+                'emit' => null,
+                'jobs' => [
+                    'CheckEmployeeShiftOverlap',
+                    'CheckTimeOffConflict',
+                    'CheckAssignmentActive',
+                    'ValidateAvailability'
+                ],
+                'notifications' => []
+            ],
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | ROLES & PERMISSIONS (Updated)
+    |--------------------------------------------------------------------------
+    */
+    'user_roles' => [
+        'super_admin' => [
+            'label' => 'Super Admin',
+            'description' => 'Full platform access',
+            'permissions' => ['*']
+        ],
+        'agency_admin' => [
+            'label' => 'Agency Admin',
+            'description' => 'Manage agency operations, employees, assignments',
+            'permissions' => [
+                'agency_employee:*',
+                'agent:*',
+                'assignment:*',
+                'shift:view,create,update',
+                'timesheet:*',
+                'invoice:view,create',
+                'payroll:*',
+                'payout:*',
+                'agency_response:*',
+                'availability:view',
+                'time_off:approve',
+            ]
+        ],
+        'agent' => [
+            'label' => 'Agent',
+            'description' => 'Manage assignments and shifts for agency',
+            'permissions' => [
+                'agency_employee:view',
+                'assignment:view,create,update',
+                'shift:view,create,update',
+                'shift_offer:*',
+                'agency_response:create,view',
+                'timesheet:view,approve',
+            ]
+        ],
+        'employer_admin' => [
+            'label' => 'Employer Admin',
+            'description' => 'Manage shift requests, approve timesheets, pay invoices',
+            'permissions' => [
+                'shift_request:*',
+                'agency_response:view',
+                'assignment:view',
+                'shift:view',
+                'contact:*',
+                'location:*',
+                'timesheet:approve,view',
+                'invoice:view,pay',
+            ]
+        ],
+        'contact' => [
+            'label' => 'Employer Contact',
+            'description' => 'Approve timesheets and shifts on-site',
+            'permissions' => [
+                'timesheet:approve,view',
+                'shift:approve,view',
+                'shift_approval:create',
+            ]
+        ],
+        'employee' => [
+            'label' => 'Employee',
+            'description' => 'View assignments, work shifts, manage availability',
+            'permissions' => [
+                'assignment:view:own',
+                'shift:view:own',
+                'shift_offer:respond:own',
+                'timesheet:create:own,view:own',
+                'availability:manage:own',
+                'time_off:request',
+                'agency_employee:view:own',
+            ]
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | SCHEDULING CONFIGURATION
     |--------------------------------------------------------------------------
     */
     'scheduling' => [
+        'overlap_prevention' => [
+            'enabled' => true,
+            'check_across_all_agencies' => true,
+            'check_time_off_requests' => true,
+            'buffer_minutes' => 0, // No buffer, strict overlap prevention
+        ],
         'availability' => [
             'default_timezone' => 'UTC',
             'min_shift_notice_hours' => 24,
@@ -1119,135 +1593,41 @@ return [
             'consider_availability' => true,
             'consider_qualifications' => true,
             'consider_location_preference' => true,
-            'consider_employee_preferences' => true,
             'max_travel_distance_km' => 50,
-            'prefer_employees_with_previous_shifts' => true,
-            'auto_offer_to_best_match' => false,
+            'prefer_employees_with_history' => true,
         ],
-        'notifications' => [
-            'shift_offer_expiry_hours' => 24,
-            'reminder_before_shift_hours' => 2,
-            'availability_update_notification' => true,
-        ]
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | EVENTS & FLOWS
-    |--------------------------------------------------------------------------
-    | Define event keys and canonical flows; used by the event bus + queue workers.
-    | Flows are sequential arrays of step definitions containing:
-    | - name: step name
-    | - actor: who triggers it
-    | - event: event emitted
-    | - jobs: queued job keys to run
-    | - notifications: notification templates
-    */
-    'events' => [
-        'shift.requested' => ['description' => 'Employer requested a shift'],
-        'shift.offered' => ['description' => 'Agency offered an employee for shift'],
-        'shift.assigned' => ['description' => 'Shift assigned to employee'],
-        'shift.completed' => ['description' => 'Employee marked shift as completed'],
-        'timesheet.submitted' => ['description' => 'Timesheet submitted by employee'],
-        'timesheet.agency_approved' => ['description' => 'Agency approves timesheet'],
-        'timesheet.employer_approved' => ['description' => 'Employer contact approves timesheet'],
-        'invoice.generated' => ['description' => 'Invoice generated'],
-        'invoice.paid' => ['description' => 'Invoice paid'],
-        'payout.processed' => ['description' => 'Payout processed to employees'],
-        'subscription.renewed' => ['description' => 'Subscription renewed'],
-        'webhook.dispatch' => ['description' => 'Dispatch external webhook'],
-        'availability.updated' => ['description' => 'Employee availability updated'],
-        'time_off.requested' => ['description' => 'Employee requested time off'],
-        'time_off.approved' => ['description' => 'Time off request approved'],
-        'shift_offer.sent' => ['description' => 'Shift offer sent to employee'],
-        'shift_offer.accepted' => ['description' => 'Employee accepted shift offer'],
-        'shift_offer.rejected' => ['description' => 'Employee rejected shift offer'],
-    ],
-
-    'flows' => [
-
-        /*
-        |--------------------------------------------------------------------------
-        | Shift request -> assignment -> completion -> billing
-        |--------------------------------------------------------------------------
-        */
-        'shift_lifecycle' => [
-            ['step' => 'employer_creates_shift', 'actor' => 'employer_admin', 'emit' => 'shift.requested', 'jobs' => ['ValidateShift', 'FindAvailableEmployees'], 'notifications' => ['shift.requested:agency']],
-            ['step' => 'agency_offers_employee', 'actor' => 'agent', 'emit' => 'shift_offer.sent', 'jobs' => ['LockCandidate', 'NotifyEmployee'], 'notifications' => ['shift_offer.sent:employee']],
-            ['step' => 'employee_responds_offer', 'actor' => 'employee', 'emit' => 'shift_offer.accepted', 'jobs' => ['CreatePlacementIfMissing', 'CreateAssignment'], 'notifications' => ['shift_offer.accepted:agency', 'shift.assigned:employer']],
-            ['step' => 'employee_clocks_in_out', 'actor' => 'employee', 'emit' => null, 'jobs' => ['CalculateHours'], 'notifications' => []],
-            ['step' => 'employee_marks_completed', 'actor' => 'employee', 'emit' => 'shift.completed', 'jobs' => ['CreateTimesheet', 'NotifyAgencyForApproval'], 'notifications' => ['timesheet.submitted:agency']],
-            ['step' => 'agency_approves_timesheet', 'actor' => 'agency_admin', 'emit' => 'timesheet.agency_approved', 'jobs' => ['MarkTimesheetAgencyApproved', 'NotifyEmployerForSignoff'], 'notifications' => ['timesheet.agency_approved:employer']],
-            ['step' => 'employer_contact_signs', 'actor' => 'contact', 'emit' => 'timesheet.employer_approved', 'jobs' => ['MarkTimesheetEmployerApproved', 'GenerateInvoice'], 'notifications' => ['timesheet.employer_approved:agency', 'invoice.generated:employer']],
-            ['step' => 'invoice_to_employer', 'actor' => 'system', 'emit' => 'invoice.generated', 'jobs' => ['CreateInvoiceLines', 'ApplyTaxes', 'SendInvoice'], 'notifications' => ['invoice.generated:employer']],
-            ['step' => 'employer_pays_invoice', 'actor' => 'employer_admin', 'emit' => 'invoice.paid', 'jobs' => ['RecordPayment', 'SchedulePayoutToAgency', 'RecordPlatformFee'], 'notifications' => ['invoice.paid:agency', 'invoice.paid:shiftpilot']],
-            ['step' => 'agency_processes_payroll', 'actor' => 'agency_admin', 'emit' => 'payout.processed', 'jobs' => ['CreatePayrollRecords', 'ExecutePayouts', 'MarkPayrollPaid'], 'notifications' => ['payout.processed:employee', 'payout.processed:agency']],
-        ],
-
-        /*
-        |--------------------------------------------------------------------------
-        | Employee Availability Management
-        |--------------------------------------------------------------------------
-        */
-        'availability_management' => [
-            ['step' => 'employee_sets_availability', 'actor' => 'employee', 'emit' => 'availability.updated', 'jobs' => ['ValidateAvailability', 'UpdateEmployeeCalendar'], 'notifications' => ['availability.updated:agency']],
-            ['step' => 'employee_requests_time_off', 'actor' => 'employee', 'emit' => 'time_off.requested', 'jobs' => ['CheckShiftConflicts', 'NotifyAgency'], 'notifications' => ['time_off.requested:agency']],
-            ['step' => 'agency_reviews_time_off', 'actor' => 'agency_admin', 'emit' => 'time_off.approved', 'jobs' => ['ApproveTimeOff', 'UpdateUnavailablePeriods'], 'notifications' => ['time_off.approved:employee']],
-        ],
-
-        /*
-        |--------------------------------------------------------------------------
-        | Automated Shift Assignment
-        |--------------------------------------------------------------------------
-        */
-        'auto_scheduling' => [
-            ['step' => 'find_available_employees', 'actor' => 'system', 'emit' => null, 'jobs' => ['MatchEmployeesToShift', 'ScoreCandidates'], 'notifications' => []],
-            ['step' => 'auto_offer_shifts', 'actor' => 'system', 'emit' => 'shift_offer.sent', 'jobs' => ['CreateShiftOffers', 'NotifyEmployees'], 'notifications' => ['shift_offer.sent:employee']],
-            ['step' => 'monitor_responses', 'actor' => 'system', 'emit' => null, 'jobs' => ['TrackOfferExpiry', 'EscalateUnfilledShifts'], 'notifications' => ['shift_offer.expiring:employee', 'shift.unfilled:agency']],
-        ],
-
-        /*
-        |--------------------------------------------------------------------------
-        | Subscription / platform billing flow
-        |--------------------------------------------------------------------------
-        */
-        'platform_billing' => [
-            ['step' => 'subscription_renewal', 'actor' => 'system', 'emit' => 'subscription.renewed', 'jobs' => ['ChargeSubscription', 'RecordRevenue', 'NotifySubscriber'], 'notifications' => ['subscription.renewed:subscriber']],
-            ['step' => 'transaction_commission', 'actor' => 'system', 'emit' => null, 'jobs' => ['CalculateCommission', 'InvoiceAgencyForCommission', 'RecordPlatformRevenue'], 'notifications' => ['commission.invoice:agency']],
-            ['step' => 'agency_pays_platform', 'actor' => 'agency_admin', 'emit' => null, 'jobs' => ['RecordPayment', 'ApplyBalance'], 'notifications' => ['payment.received:agency_admin']]
-        ]
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | NOTIFICATION TEMPLATES (keys only, content stored in templates)
+    | NOTIFICATION TEMPLATES
     |--------------------------------------------------------------------------
     */
     'notification_templates' => [
-        'shift.requested:agency' => ['channels' => ['email', 'in_app']],
-        'shift.offered:employer' => ['channels' => ['email', 'in_app']],
-        'shift.assigned:employee' => ['channels' => ['sms', 'email', 'in_app']],
+        'shift_request.published:agency' => ['channels' => ['email', 'in_app']],
+        'agency_response.submitted:employer' => ['channels' => ['email', 'in_app']],
+        'agency_response.accepted:agency' => ['channels' => ['email', 'in_app']],
+        'assignment.created:employee' => ['channels' => ['sms', 'email', 'in_app']],
+        'assignment.created:employer' => ['channels' => ['email', 'in_app']],
+        'shift.created:employee' => ['channels' => ['sms', 'email', 'in_app']],
+        'shift_offer.sent:employee' => ['channels' => ['sms', 'in_app']],
         'timesheet.submitted:agency' => ['channels' => ['email', 'in_app']],
         'timesheet.agency_approved:employer' => ['channels' => ['email', 'in_app']],
+        'timesheet.employer_approved:agency' => ['channels' => ['email', 'in_app']],
         'invoice.generated:employer' => ['channels' => ['email']],
         'invoice.paid:agency' => ['channels' => ['email']],
-        'invoice.paid:shiftpilot' => ['channels' => ['email']],
+        'payroll.generated:employee' => ['channels' => ['email', 'in_app']],
         'payout.processed:employee' => ['channels' => ['email', 'in_app']],
-        'subscription.renewed:subscriber' => ['channels' => ['email']],
-        'shift_offer.sent:employee' => ['channels' => ['sms', 'email', 'in_app']],
-        'shift_offer.accepted:agency' => ['channels' => ['email', 'in_app']],
-        'shift_offer.expiring:employee' => ['channels' => ['sms', 'in_app']],
-        'shift.unfilled:agency' => ['channels' => ['email', 'in_app']],
-        'availability.updated:agency' => ['channels' => ['email', 'in_app']],
+        'availability.updated:agency' => ['channels' => ['in_app']],
         'time_off.requested:agency' => ['channels' => ['email', 'in_app']],
         'time_off.approved:employee' => ['channels' => ['email', 'in_app']],
+        'time_off.impact:employer' => ['channels' => ['email', 'in_app']],
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | PAYMENT / PAYOUT PROVIDERS
+    | PAYMENT CONFIGURATION
     |--------------------------------------------------------------------------
-    | Providers configured in env and referred here by key.
     */
     'payments' => [
         'providers' => [
@@ -1257,23 +1637,20 @@ return [
         'default_provider' => env('PAYMENT_PROVIDER', 'stripe'),
         'platform_account' => [
             'stripe_account_id' => env('STRIPE_ACCOUNT_ID'),
-            'bank_details' => env('PLATFORM_BANK_DETAILS', null),
         ],
-        // When to auto-capture/submission behaviour
-        'capture_mode' => env('PAYMENT_CAPTURE_MODE', 'auto'), // auto/manual
+        'capture_mode' => env('PAYMENT_CAPTURE_MODE', 'auto'),
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | TAX & VAT RULES
+    | TAX CONFIGURATION
     |--------------------------------------------------------------------------
-    | Basic config: tax rates per country and mode (expand with plugin).
     */
     'tax' => [
         'default_tax_percent' => 0.00,
         'country_rates' => [
             'GB' => 20.00,
-            'US' => 0.00, // use regional state logic in app
+            'US' => 0.00,
             'DE' => 19.00,
         ],
         'apply_tax_to_platform_fees' => true,
@@ -1281,72 +1658,71 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | PAYOUT SETTINGS
+    | PAYOUT CONFIGURATION
     |--------------------------------------------------------------------------
     */
     'payouts' => [
         'min_payout_amount' => 50.00,
         'payout_batch_window_days' => 7,
-        'payout_provider' => 'stripe_connect', // expected to use Connect for agency payouts
-        'payout_hold_days' => 2, // hold after employer payment clears
+        'payout_provider' => 'stripe_connect',
+        'payout_hold_days' => 2,
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | INVOICE / LINE ITEM SCHEMA
+    | INVOICE CONFIGURATION
     |--------------------------------------------------------------------------
-    | Line items created when invoicing employer (per shift)
     */
-    'invoice_line_item_template' => [
-        'fields' => ['description', 'quantity', 'unit_price', 'tax_rate', 'total'],
-        'shift_line_item' => [
-            'description_template' => 'Shift: {role} at {location} on {date} {start}-{end}',
-            'quantity' => 1,
-            'unit_price_source' => 'shift.hourly_rate', // multiplied by hours worked
-            'taxable' => true
+    'invoicing' => [
+        'invoice_due_days' => env('INVOICE_DUE_DAYS', 14),
+        'auto_generate_on_timesheet_approval' => true,
+        'line_item_template' => [
+            'shift_description' => '{role} at {location} - {date} {start_time} to {end_time}',
+            'include_employee_name' => false, // Privacy consideration
+            'include_hourly_breakdown' => true,
         ],
-        'commission_line_item' => [
-            'description_template' => 'ShiftPilot commission ({percent}%)',
-            'calculation_source' => 'platform.commission_rate'
-        ]
+        'platform_commission' => [
+            'rate_percent' => 2.00,
+            'applied_to' => 'agency_markup', // or 'total_amount'
+            'invoice_separately' => true,
+        ],
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | REPORTS & RECONCILIATION
+    | REPORTS
     |--------------------------------------------------------------------------
-    | Keys that can be used to generate reports and reconcile payments.
     */
     'reports' => [
-        'daily_revenue' => ['sql_view' => 'report_daily_revenue'],
-        'outstanding_invoices' => ['sql_view' => 'report_outstanding_invoices'],
-        'agency_balance' => ['sql_view' => 'report_agency_balance'],
-        'payouts_pending' => ['sql_view' => 'report_payouts_pending'],
-        'employee_availability' => ['sql_view' => 'report_employee_availability'],
-        'shift_fill_rate' => ['sql_view' => 'report_shift_fill_rate'],
-        'time_off_balance' => ['sql_view' => 'report_time_off_balance'],
+        'employee_utilization' => ['description' => 'Hours worked by employee across all agencies'],
+        'agency_revenue' => ['description' => 'Revenue by agency per period'],
+        'employer_spend' => ['description' => 'Total spend by employer per agency'],
+        'assignment_duration' => ['description' => 'Average assignment length'],
+        'shift_fill_rate' => ['description' => 'Percentage of shifts filled vs requested'],
+        'overlap_violations' => ['description' => 'Any detected shift overlaps'],
+        'availability_compliance' => ['description' => 'Shifts scheduled outside availability'],
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | WEBHOOKS (internal events -> external consumers)
+    | WEBHOOKS
     |--------------------------------------------------------------------------
     */
     'webhooks' => [
         'enabled_events' => [
-            'shift.assigned',
-            'timesheet.approved',
+            'assignment.created',
+            'shift.completed',
+            'timesheet.employer_approved',
             'invoice.paid',
-            'payout.processed',
             'availability.updated',
-            'time_off.approved'
+            'time_off.approved',
         ],
         'retry_policy' => ['attempts' => 5, 'backoff_seconds' => 60]
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | AUDIT / SECURITY
+    | SECURITY & AUDIT
     |--------------------------------------------------------------------------
     */
     'security' => [
@@ -1359,48 +1735,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | OPERATIONAL KNOBS
+    | OPERATIONAL SETTINGS
     |--------------------------------------------------------------------------
     */
     'ops' => [
-        'invoice_due_days' => env('INVOICE_DUE_DAYS', 14),
-        'payout_delay_days' => env('PAYOUT_DELAY_DAYS', 7),
         'max_shift_lookahead_days' => 365,
         'timesheet_edit_window_minutes' => 60,
         'shift_offer_expiry_hours' => 24,
-        'auto_schedule_enabled' => true,
-        'max_auto_offers_per_shift' => 3,
+        'auto_reject_expired_offers' => true,
+        'assignment_max_duration_days' => 365,
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | DATA RETENTION & BACKUPS
+    | DATA RETENTION
     |--------------------------------------------------------------------------
     */
     'retention' => [
         'audit_logs_days' => env('AUDIT_LOG_RETENTION_DAYS', 365),
-        'invoice_storage_days' => env('INVOICE_STORAGE_DAYS', 365 * 7),
-        'availability_data_days' => env('AVAILABILITY_RETENTION_DAYS', 90),
+        'invoice_storage_days' => env('INVOICE_STORAGE_DAYS', 2555), // 7 years
+        'timesheet_storage_days' => env('TIMESHEET_STORAGE_DAYS', 2555),
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | UI / RESOURCE HINTS (for scaffolding Filament resources)
-    |--------------------------------------------------------------------------
-    | Helpful hints used to scaffold admin panels and relation managers.
-    */
-    'ui' => [
-        'filament' => [
-            'resources' => [
-                'employer' => ['navigation' => ['label' => 'Employers', 'icon' => 'heroicon-o-office-building']],
-                'agency' => ['navigation' => ['label' => 'Agencies', 'icon' => 'heroicon-o-briefcase']],
-                'shift' => ['navigation' => ['label' => 'Shifts', 'icon' => 'heroicon-o-calendar']],
-                'timesheet' => ['navigation' => ['label' => 'Timesheets', 'icon' => 'heroicon-o-clock']],
-                'invoice' => ['navigation' => ['label' => 'Invoices', 'icon' => 'heroicon-o-document-text']],
-                'payroll' => ['navigation' => ['label' => 'Payroll', 'icon' => 'heroicon-o-currency-pound']],
-                'employee_availability' => ['navigation' => ['label' => 'Availability', 'icon' => 'heroicon-o-calendar']],
-                'time_off_request' => ['navigation' => ['label' => 'Time Off', 'icon' => 'heroicon-o-clock']],
-            ]
-        ]
-    ]
 ];

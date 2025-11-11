@@ -8,11 +8,11 @@ class EventServiceProvider extends ServiceProvider
 {
     protected $listen = [
         // Location Events
-        \App\Events\LocationCreated::class => [
+        \App\Events\Location\LocationCreated::class => [
             \App\Listeners\LogLocationActivity::class,
             \App\Listeners\NotifyAgencyOfNewLocation::class,
         ],
-        \App\Events\LocationUpdated::class => [
+        \App\Events\Location\LocationUpdated::class => [
             \App\Listeners\LogLocationActivity::class,
         ],
 
@@ -22,33 +22,33 @@ class EventServiceProvider extends ServiceProvider
         ],
 
         // Shift Events
-        \App\Events\ShiftCreated::class => [
+        \App\Events\Shift\ShiftCreated::class => [
             \App\Listeners\LogShiftActivity::class,
         ],
-        \App\Events\ShiftCancelled::class => [
+        \App\Events\Shift\ShiftCancelled::class => [
             \App\Listeners\LogShiftActivity::class,
         ],
-        \App\Events\ShiftRequested::class => [
+        \App\Events\Shift\ShiftRequested::class => [
             \App\Listeners\ProcessShiftRequested::class,
         ],
-        \App\Events\ShiftOffered::class => [
+        \App\Events\Shift\ShiftOffered::class => [
             \App\Listeners\ProcessShiftOffered::class,
         ],
-        \App\Events\ShiftAssigned::class => [
+        \App\Events\Shift\ShiftAssigned::class => [
             \App\Listeners\ProcessShiftAssigned::class,
         ],
-        \App\Events\ShiftCompleted::class => [
+        \App\Events\Shift\ShiftCompleted::class => [
             \App\Listeners\ProcessShiftCompleted::class,
         ],
 
         // Shift Offer Events
-        \App\Events\ShiftOfferSent::class => [
+        \App\Events\Shift\ShiftOfferSent::class => [
             \App\Listeners\ProcessShiftOfferSent::class,
         ],
-        \App\Events\ShiftOfferAccepted::class => [
+        \App\Events\Shift\ShiftOfferAccepted::class => [
             \App\Listeners\ProcessShiftOfferAccepted::class,
         ],
-        \App\Events\ShiftOfferRejected::class => [
+        \App\Events\Shift\ShiftOfferRejected::class => [
             \App\Listeners\ProcessShiftOfferRejected::class,
         ],
 
@@ -106,9 +106,24 @@ class EventServiceProvider extends ServiceProvider
             \App\Listeners\ProcessTimeOffApproved::class,
         ],
 
-        // Subscription Event
         \App\Events\SubscriptionRenewed::class => [
             \App\Listeners\ProcessSubscriptionRenewed::class,
+        ],
+
+        \App\Events\Assignment\AssignmentCreated::class => [
+            \App\Listeners\Assignment\SendAssignmentCreatedNotifications::class,
+        ],
+        \App\Events\Assignment\AssignmentStatusChanged::class => [
+            \App\Listeners\Assignment\SendAssignmentStatusChangeNotifications::class,
+        ],
+        \App\Events\Assignment\AssignmentCompleted::class => [
+            \App\Listeners\Assignment\HandleAssignmentCompletion::class,
+        ],
+        \App\Events\Assignment\AssignmentExtended::class => [
+            // Add listeners for extension events
+        ],
+        \App\Events\Assignment\AssignmentCancelled::class => [
+            \App\Listeners\Assignment\HandleAssignmentCancellation::class,
         ],
     ];
 

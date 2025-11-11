@@ -11,85 +11,44 @@ use App\Models\ShiftOffer;
 use App\Models\Timesheet;
 use Illuminate\Support\Collection;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class CalendarEventsService
 {
     public function getEventsForUser(User $user, array $filters): Collection
     {
-        $startDate = $filters['start_date'];
-        $endDate = $filters['end_date'];
-        $entityType = $filters['filter'] ?? 'all';
-
-        $events = match ($user->role) {
-            'super_admin' => $this->getAllEvents($startDate, $endDate, $entityType),
-            'agency_admin', 'agent' => $this->getAgencyEvents($user, $startDate, $endDate, $entityType),
-            'employer_admin', 'contact' => $this->getEmployerEvents($user, $startDate, $endDate, $entityType),
-            'employee' => $this->getEmployeeEvents($user, $startDate, $endDate, $entityType),
-            default => collect()
-        };
-
-        return $this->applyFilters($events, $filters);
+        $query = $this->buildEventQuery($user, $filters);
+        return $query->get();
     }
 
     public function getUpcomingShifts(User $user): Collection
     {
-        $today = now()->toDateString();
-        $nextWeek = now()->addWeek()->toDateString();
-
-        return match ($user->role) {
-            'employee' => Shift::with(['employer', 'location'])
-                ->where('employee_id', $user->employee?->id)
-                ->whereBetween('start_time', [$today, $nextWeek])
-                ->whereIn('status', ['assigned', 'offered'])
-                ->orderBy('start_time')
-                ->limit(10)
-                ->get(),
-
-            'agency_admin', 'agent' => Shift::with(['employer', 'employee', 'location'])
-                ->where('agency_id', $user->agency?->id)
-                ->whereBetween('start_time', [$today, $nextWeek])
-                ->whereIn('status', ['assigned', 'offered'])
-                ->orderBy('start_time')
-                ->limit(10)
-                ->get(),
-
-            'employer_admin', 'contact' => Shift::with(['agency', 'employee', 'location'])
-                ->where('employer_id', $user->employer?->id)
-                ->whereBetween('start_time', [$today, $nextWeek])
-                ->whereIn('status', ['assigned', 'offered'])
-                ->orderBy('start_time')
-                ->limit(10)
-                ->get(),
-
-            default => collect()
-        };
-    }
-
-    public function getPendingActions(User $user): Collection
-    {
-        $events = $this->getEventsForUser($user, [
-            'start_date' => now()->subDays(7)->toDateString(),
-            'end_date' => now()->addDays(30)->toDateString(),
-            'requires_action' => true
-        ]);
-
-        return $events->filter(function ($event) use ($user) {
-            return $event->requires_action &&
-                in_array($user->role, $event->actionable_by);
-        });
+        return Shift::with($this->getShiftRelations($user))
+            ->whereBetween('start_time', [now()->toDateString(), now()->addWeek()->toDateString()])
+            ->whereIn('status', ['assigned', 'offered'])
+            ->orderBy('start_time')
+            ->limit(10)
+            ->get();
     }
 
     public function getUrgentShifts(User $user): Collection
     {
-        $events = $this->getEventsForUser($user, [
+        return $this->getEventsForUser($user, [
             'start_date' => now()->toDateString(),
             'end_date' => now()->addDays(3)->toDateString()
-        ]);
-
-        return $events->filter(function ($event) {
+        ])->filter(function ($event) {
             return $event->priority === 'urgent' ||
                 ($event->status === 'open' && $event->start_time->diffInHours(now()) < 24);
         });
+    }
+
+    public function getPendingActions(User $user): Collection
+    {
+        return $this->getEventsForUser($user, [
+            'start_date' => now()->subDays(7)->toDateString(),
+            'end_date' => now()->addDays(30)->toDateString(),
+            'requires_action' => true
+        ])->filter(fn($event) => $event->requires_action && in_array($user->role, $event->actionable_by));
     }
 
     public function getEventStats(User $user): array
@@ -117,9 +76,7 @@ class CalendarEventsService
 
         $workload = [];
         for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
-            $dayEvents = $events->filter(function ($event) use ($date) {
-                return Carbon::parse($event->date)->isSameDay($date);
-            });
+            $dayEvents = $events->filter(fn($event) => Carbon::parse($event->date)->isSameDay($date));
 
             $workload[$date->toDateString()] = [
                 'total_events' => $dayEvents->count(),
@@ -172,7 +129,6 @@ class CalendarEventsService
             'accept' => $this->acceptShiftOffer($user, $event, $data),
             'reject' => $this->rejectShiftOffer($user, $event, $data),
             'approve' => $this->approveTimeOff($user, $event, $data),
-            'complete' => $this->completeShift($user, $event, $data),
             default => throw new \Exception('Invalid action type')
         };
     }
@@ -181,33 +137,31 @@ class CalendarEventsService
     {
         $shift = Shift::findOrFail($shiftId);
 
-        if (!$this->canManageShift($user, $shift)) {
-            throw new \Exception('Not authorized to offer this shift');
-        }
+        $this->authorizeShiftManagement($user, $shift);
 
-        $shiftOffer = ShiftOffer::create([
-            'shift_id' => $shift->id,
-            'employee_id' => $data['employee_id'],
-            'offered_by_id' => $user->id,
-            'status' => 'pending',
-            'expires_at' => $data['expires_at'] ?? now()->addHours(24),
-        ]);
+        return DB::transaction(function () use ($user, $shift, $data) {
+            $shiftOffer = ShiftOffer::create([
+                'shift_id' => $shift->id,
+                'employee_id' => $data['employee_id'],
+                'offered_by_id' => $user->id,
+                'status' => 'pending',
+                'expires_at' => $data['expires_at'] ?? now()->addHours(24),
+            ]);
 
-        $shift->update(['status' => 'offered']);
+            $shift->update(['status' => 'offered']);
 
-        return [
-            'shift_offer' => $shiftOffer,
-            'message' => 'Shift offered successfully'
-        ];
+            return [
+                'shift_offer' => $shiftOffer,
+                'message' => 'Shift offered successfully'
+            ];
+        });
     }
 
     public function assignShiftToEmployee(User $user, string $shiftId, array $data): array
     {
         $shift = Shift::findOrFail($shiftId);
 
-        if (!$this->canManageShift($user, $shift)) {
-            throw new \Exception('Not authorized to assign this shift');
-        }
+        $this->authorizeShiftManagement($user, $shift);
 
         $shift->update([
             'employee_id' => $data['employee_id'],
@@ -215,7 +169,7 @@ class CalendarEventsService
         ]);
 
         return [
-            'shift' => $shift,
+            'shift' => $shift->load('employer', 'employee', 'location'),
             'message' => 'Shift assigned successfully'
         ];
     }
@@ -224,24 +178,24 @@ class CalendarEventsService
     {
         $shift = Shift::findOrFail($shiftId);
 
-        if (!$this->canCompleteShift($user, $shift)) {
-            throw new \Exception('Not authorized to complete this shift');
-        }
+        $this->authorizeShiftCompletion($user, $shift);
 
-        $shift->update(['status' => 'completed']);
+        return DB::transaction(function () use ($shift, $data) {
+            $shift->update(['status' => 'completed']);
 
-        $timesheet = Timesheet::create([
-            'shift_id' => $shift->id,
-            'employee_id' => $shift->employee_id,
-            'status' => 'pending',
-            'notes' => $data['notes'] ?? 'Shift completed'
-        ]);
+            $timesheet = Timesheet::create([
+                'shift_id' => $shift->id,
+                'employee_id' => $shift->employee_id,
+                'status' => 'pending',
+                'notes' => $data['notes'] ?? 'Shift completed'
+            ]);
 
-        return [
-            'shift' => $shift,
-            'timesheet' => $timesheet,
-            'message' => 'Shift completed successfully'
-        ];
+            return [
+                'shift' => $shift,
+                'timesheet' => $timesheet,
+                'message' => 'Shift completed successfully'
+            ];
+        });
     }
 
     public function approveShift(User $user, string $shiftId, array $data): array
@@ -249,9 +203,7 @@ class CalendarEventsService
         $shift = Shift::findOrFail($shiftId);
         $approvalType = $data['approval_type'];
 
-        if (!$this->canApproveShift($user, $shift, $approvalType)) {
-            throw new \Exception('Not authorized to approve this shift');
-        }
+        $this->authorizeShiftApproval($user, $shift, $approvalType);
 
         $newStatus = $approvalType === 'agency' ? 'agency_approved' : 'employer_approved';
         $shift->update(['status' => $newStatus]);
@@ -266,9 +218,7 @@ class CalendarEventsService
     {
         $shift = Shift::findOrFail($shiftId);
 
-        if (!$this->canClockIn($user, $shift)) {
-            throw new \Exception('Not authorized to clock in for this shift');
-        }
+        $this->authorizeClockIn($user, $shift);
 
         $timesheet = Timesheet::updateOrCreate(
             ['shift_id' => $shift->id],
@@ -288,26 +238,26 @@ class CalendarEventsService
     public function clockOut(User $user, string $shiftId, array $data): array
     {
         $shift = Shift::findOrFail($shiftId);
-        $timesheet = Timesheet::where('shift_id', $shift->id)->first();
+        $timesheet = Timesheet::where('shift_id', $shift->id)->firstOrFail();
 
-        if (!$timesheet || !$this->canClockOut($user, $shift)) {
-            throw new \Exception('Not authorized to clock out for this shift');
-        }
+        $this->authorizeClockOut($user, $shift);
 
-        $timesheet->update([
-            'clock_out' => now(),
-            'break_minutes' => $data['break_minutes'] ?? 0,
-            'status' => 'pending'
-        ]);
+        return DB::transaction(function () use ($timesheet, $data) {
+            $timesheet->update([
+                'clock_out' => now(),
+                'break_minutes' => $data['break_minutes'] ?? 0,
+                'status' => 'pending'
+            ]);
 
-        $hoursWorked = $timesheet->clock_out->diffInMinutes($timesheet->clock_in) / 60;
-        $hoursWorked -= ($timesheet->break_minutes / 60);
-        $timesheet->update(['hours_worked' => $hoursWorked]);
+            $hoursWorked = $timesheet->clock_out->diffInMinutes($timesheet->clock_in) / 60;
+            $hoursWorked -= ($timesheet->break_minutes / 60);
+            $timesheet->update(['hours_worked' => $hoursWorked]);
 
-        return [
-            'timesheet' => $timesheet,
-            'message' => 'Clocked out successfully'
-        ];
+            return [
+                'timesheet' => $timesheet,
+                'message' => 'Clocked out successfully'
+            ];
+        });
     }
 
     public function getEmployeeAvailability(User $user, array $filters): Collection
@@ -345,16 +295,18 @@ class CalendarEventsService
             throw new \Exception('User is not an employee');
         }
 
-        EmployeeAvailability::where('employee_id', $employeeId)->delete();
+        return DB::transaction(function () use ($employeeId, $data) {
+            EmployeeAvailability::where('employee_id', $employeeId)->delete();
 
-        foreach ($data['availabilities'] as $availability) {
-            EmployeeAvailability::create(array_merge($availability, ['employee_id' => $employeeId]));
-        }
+            $availabilities = collect($data['availabilities'])->map(function ($availability) use ($employeeId) {
+                return EmployeeAvailability::create(array_merge($availability, ['employee_id' => $employeeId]));
+            });
 
-        return [
-            'message' => 'Availability updated successfully',
-            'availabilities' => $this->getEmployeeAvailability($user, [])
-        ];
+            return [
+                'message' => 'Availability updated successfully',
+                'availabilities' => $availabilities
+            ];
+        });
     }
 
     public function requestTimeOff(User $user, array $data): array
@@ -371,7 +323,7 @@ class CalendarEventsService
         ]));
 
         return [
-            'time_off_request' => $timeOffRequest,
+            'time_off_request' => $timeOffRequest->load('employee'),
             'message' => 'Time off request submitted successfully'
         ];
     }
@@ -488,227 +440,128 @@ class CalendarEventsService
         return $scheduleData;
     }
 
-    // Private helper methods
-
-    private function getAllEvents(string $startDate, string $endDate, string $entityType): Collection
+    private function buildEventQuery(User $user, array $filters): \Illuminate\Database\Eloquent\Builder
     {
-        $events = collect();
+        $startDate = $filters['start_date'];
+        $endDate = $filters['end_date'];
+        $entityType = $filters['filter'] ?? 'all';
+
+        return match ($user->role) {
+            'super_admin' => $this->buildSuperAdminQuery($startDate, $endDate, $entityType),
+            'agency_admin', 'agent' => $this->buildAgencyQuery($user, $startDate, $endDate, $entityType),
+            'employer_admin', 'contact' => $this->buildEmployerQuery($user, $startDate, $endDate, $entityType),
+            'employee' => $this->buildEmployeeQuery($user, $startDate, $endDate, $entityType),
+            default => Shift::whereNull('id')
+        };
+    }
+
+    private function buildSuperAdminQuery(string $startDate, string $endDate, string $entityType): \Illuminate\Database\Eloquent\Builder
+    {
+        $baseQuery = Shift::whereNull('id');
 
         if ($this->shouldIncludeEntity($entityType, 'shifts')) {
-            $events = $events->merge($this->getShifts($startDate, $endDate));
+            $shifts = Shift::with(['employer', 'agency', 'employee', 'location'])
+                ->whereBetween('start_time', [$startDate, $endDate]);
+            $baseQuery = $shifts;
         }
 
         if ($this->shouldIncludeEntity($entityType, 'placements')) {
-            $events = $events->merge($this->getPlacements($startDate, $endDate));
+            $placements = Placement::with(['employer', 'selectedAgency', 'selectedEmployee', 'location'])
+                ->whereBetweenDates($startDate, $endDate);
+            $baseQuery = $baseQuery->getQuery() !== Shift::whereNull('id')->getQuery()
+                ? $baseQuery->union($placements)
+                : $placements;
         }
 
-        if ($this->shouldIncludeEntity($entityType, 'time_off')) {
-            $events = $events->merge($this->getTimeOffRequests($startDate, $endDate));
-        }
-
-        if ($this->shouldIncludeEntity($entityType, 'interviews')) {
-            $events = $events->merge($this->getInterviews($startDate, $endDate));
-        }
-
-        if ($this->shouldIncludeEntity($entityType, 'availabilities')) {
-            $events = $events->merge($this->getAvailabilities($startDate, $endDate));
-        }
-
-        return $events;
+        return $baseQuery;
     }
 
-    private function getAgencyEvents(User $user, string $startDate, string $endDate, string $entityType): Collection
+    private function buildAgencyQuery(User $user, string $startDate, string $endDate, string $entityType): \Illuminate\Database\Eloquent\Builder
     {
         $agencyId = $user->agency?->id;
+        $baseQuery = Shift::whereNull('id');
 
         if (!$agencyId) {
-            return collect();
+            return $baseQuery;
         }
-
-        $events = collect();
 
         if ($this->shouldIncludeEntity($entityType, 'shifts')) {
             $shifts = Shift::with(['employer', 'employee', 'location'])
                 ->where('agency_id', $agencyId)
-                ->whereBetween('start_time', [$startDate, $endDate])
-                ->get();
-            $events = $events->merge($shifts);
+                ->whereBetween('start_time', [$startDate, $endDate]);
+            $baseQuery = $shifts;
         }
 
         if ($this->shouldIncludeEntity($entityType, 'placements')) {
             $placements = Placement::with(['employer', 'location'])
                 ->where('selected_agency_id', $agencyId)
-                ->whereBetweenDates($startDate, $endDate)
-                ->get();
-            $events = $events->merge($placements);
+                ->whereBetweenDates($startDate, $endDate);
+            $baseQuery = $baseQuery->getQuery() !== Shift::whereNull('id')->getQuery()
+                ? $baseQuery->union($placements)
+                : $placements;
         }
 
-        if ($this->shouldIncludeEntity($entityType, 'time_off')) {
-            $timeOff = TimeOffRequest::with(['employee'])
-                ->whereHas('employee', fn($query) => $query->where('agency_id', $agencyId))
-                ->whereBetweenDates($startDate, $endDate)
-                ->get();
-            $events = $events->merge($timeOff);
-        }
-
-        if ($this->shouldIncludeEntity($entityType, 'availabilities')) {
-            $availabilities = EmployeeAvailability::with(['employee'])
-                ->whereHas('employee', fn($query) => $query->where('agency_id', $agencyId))
-                ->whereOverlappingDates($startDate, $endDate)
-                ->get();
-            $events = $events->merge($availabilities);
-        }
-
-        return $events;
+        return $baseQuery;
     }
 
-    private function getEmployerEvents(User $user, string $startDate, string $endDate, string $entityType): Collection
+    private function buildEmployerQuery(User $user, string $startDate, string $endDate, string $entityType): \Illuminate\Database\Eloquent\Builder
     {
         $employerId = $user->employer?->id;
+        $baseQuery = Shift::whereNull('id');
 
         if (!$employerId) {
-            return collect();
+            return $baseQuery;
         }
-
-        $events = collect();
 
         if ($this->shouldIncludeEntity($entityType, 'shifts')) {
             $shifts = Shift::with(['agency', 'employee', 'location'])
                 ->where('employer_id', $employerId)
-                ->whereBetween('start_time', [$startDate, $endDate])
-                ->get();
-            $events = $events->merge($shifts);
+                ->whereBetween('start_time', [$startDate, $endDate]);
+            $baseQuery = $shifts;
         }
 
         if ($this->shouldIncludeEntity($entityType, 'placements')) {
             $placements = Placement::with(['selectedAgency', 'selectedEmployee', 'location'])
                 ->where('employer_id', $employerId)
-                ->whereBetweenDates($startDate, $endDate)
-                ->get();
-            $events = $events->merge($placements);
+                ->whereBetweenDates($startDate, $endDate);
+            $baseQuery = $baseQuery->union($placements);
         }
 
-        if ($this->shouldIncludeEntity($entityType, 'time_off')) {
-            $timeOff = TimeOffRequest::with(['employee'])
-                ->whereHas('employee', fn($query) => $query->where('employer_id', $employerId))
-                ->whereBetweenDates($startDate, $endDate)
-                ->get();
-            $events = $events->merge($timeOff);
-        }
-
-        return $events;
+        return $baseQuery;
     }
 
-    private function getEmployeeEvents(User $user, string $startDate, string $endDate, string $entityType): Collection
+    private function buildEmployeeQuery(User $user, string $startDate, string $endDate, string $entityType): \Illuminate\Database\Eloquent\Builder
     {
         $employee = $user->employee;
+        $baseQuery = Shift::whereNull('id');
 
         if (!$employee) {
-            return collect();
+            return $baseQuery;
         }
-
-        $events = collect();
 
         if ($this->shouldIncludeEntity($entityType, 'shifts')) {
             $shifts = Shift::with(['employer', 'location'])
                 ->where('employee_id', $employee->id)
-                ->whereBetween('start_time', [$startDate, $endDate])
-                ->get();
-            $events = $events->merge($shifts);
+                ->whereBetween('start_time', [$startDate, $endDate]);
+            $baseQuery = $shifts;
         }
 
         if ($this->shouldIncludeEntity($entityType, 'time_off')) {
             $timeOff = TimeOffRequest::where('employee_id', $employee->id)
-                ->whereBetweenDates($startDate, $endDate)
-                ->get();
-            $events = $events->merge($timeOff);
+                ->whereBetweenDates($startDate, $endDate);
+            $baseQuery = $baseQuery->union($timeOff);
         }
 
-        if ($this->shouldIncludeEntity($entityType, 'availabilities')) {
-            $availabilities = EmployeeAvailability::where('employee_id', $employee->id)
-                ->whereOverlappingDates($startDate, $endDate)
-                ->get();
-            $events = $events->merge($availabilities);
-        }
-
-        if ($this->shouldIncludeEntity($entityType, 'interviews')) {
-            $offers = ShiftOffer::with(['shift.employer', 'shift.location'])
-                ->where('employee_id', $employee->id)
-                ->whereHas('shift', fn($query) => $query->whereBetween('start_time', [$startDate, $endDate]))
-                ->get();
-            $events = $events->merge($offers);
-        }
-
-        return $events;
-    }
-
-    private function getShifts(string $startDate, string $endDate): Collection
-    {
-        return Shift::with(['employer', 'agency', 'employee', 'location'])
-            ->whereBetween('start_time', [$startDate, $endDate])
-            ->get();
-    }
-
-    private function getPlacements(string $startDate, string $endDate): Collection
-    {
-        return Placement::with(['employer', 'selectedAgency', 'selectedEmployee', 'location'])
-            ->whereBetweenDates($startDate, $endDate)
-            ->get();
-    }
-
-    private function getTimeOffRequests(string $startDate, string $endDate): Collection
-    {
-        return TimeOffRequest::with(['employee.user'])
-            ->whereBetweenDates($startDate, $endDate)
-            ->get();
-    }
-
-    private function getInterviews(string $startDate, string $endDate): Collection
-    {
-        return ShiftOffer::with(['shift.employer', 'employee.user'])
-            ->whereHas('shift', fn($query) => $query->whereBetween('start_time', [$startDate, $endDate]))
-            ->get();
-    }
-
-    private function getAvailabilities(string $startDate, string $endDate): Collection
-    {
-        return EmployeeAvailability::with(['employee.user'])
-            ->whereOverlappingDates($startDate, $endDate)
-            ->get();
-    }
-
-    private function applyFilters(Collection $events, array $filters): Collection
-    {
-        if (isset($filters['status']) && is_array($filters['status'])) {
-            $events = $events->filter(fn($event) => in_array($event->status, $filters['status']));
-        }
-
-        if (isset($filters['entity_type']) && $filters['entity_type'] !== 'all') {
-            $events = $events->filter(fn($event) => $this->getEntityType($event) === $filters['entity_type']);
-        }
-
-        if (isset($filters['employer_id'])) {
-            $events = $events->filter(fn($event) => $event->employer_id == $filters['employer_id']);
-        }
-
-        if (isset($filters['agency_id'])) {
-            $events = $events->filter(fn($event) => isset($event->agency_id) && $event->agency_id == $filters['agency_id']);
-        }
-
-        if (isset($filters['location_id'])) {
-            $events = $events->filter(fn($event) => isset($event->location_id) && $event->location_id == $filters['location_id']);
-        }
-
-        if (isset($filters['requires_action'])) {
-            $events = $events->filter(fn($event) => $event->requires_action == $filters['requires_action']);
-        }
-
-        return $events;
+        return $baseQuery;
     }
 
     private function getEmployeeStats(User $user, string $today, string $nextWeek): array
     {
         $employeeId = $user->employee?->id;
+
+        if (!$employeeId) {
+            return $this->getDefaultStats();
+        }
 
         return [
             'total' => Shift::where('employee_id', $employeeId)->count(),
@@ -732,6 +585,10 @@ class CalendarEventsService
     {
         $agencyId = $user->agency?->id;
 
+        if (!$agencyId) {
+            return $this->getDefaultStats();
+        }
+
         return [
             'total' => Shift::where('agency_id', $agencyId)->count(),
             'shifts' => Shift::where('agency_id', $agencyId)->count(),
@@ -753,6 +610,10 @@ class CalendarEventsService
     private function getEmployerStats(User $user, string $today, string $nextWeek): array
     {
         $employerId = $user->employer?->id;
+
+        if (!$employerId) {
+            return $this->getDefaultStats();
+        }
 
         return [
             'total' => Shift::where('employer_id', $employerId)->count(),
@@ -781,23 +642,6 @@ class CalendarEventsService
         ];
     }
 
-    private function shouldIncludeEntity(string $entityType, string $targetEntity): bool
-    {
-        return $entityType === 'all' || $entityType === $targetEntity;
-    }
-
-    private function getEntityType($model): string
-    {
-        return match (get_class($model)) {
-            Shift::class => 'shift',
-            Placement::class => 'placement',
-            TimeOffRequest::class => 'time_off',
-            EmployeeAvailability::class => 'availability',
-            ShiftOffer::class => 'interview',
-            default => 'shift'
-        };
-    }
-
     private function findEventById(string $eventId)
     {
         $parts = explode('-', $eventId);
@@ -813,62 +657,6 @@ class CalendarEventsService
         }
 
         return $modelClass::find($id);
-    }
-
-    private function canManageShift(User $user, Shift $shift): bool
-    {
-        return in_array($user->role, ['agency_admin', 'agent']) &&
-            $shift->agency_id === $user->agency?->id;
-    }
-
-    private function canCompleteShift(User $user, Shift $shift): bool
-    {
-        return $user->role === 'employee' &&
-            $shift->employee_id === $user->employee?->id;
-    }
-
-    private function canApproveShift(User $user, Shift $shift, string $approvalType): bool
-    {
-        if ($approvalType === 'agency') {
-            return in_array($user->role, ['agency_admin', 'agent']) &&
-                $shift->agency_id === $user->agency?->id;
-        } else {
-            return in_array($user->role, ['employer_admin', 'contact']) &&
-                $shift->employer_id === $user->employer?->id;
-        }
-    }
-
-    private function canClockIn(User $user, Shift $shift): bool
-    {
-        return $user->role === 'employee' &&
-            $shift->employee_id === $user->employee?->id &&
-            $shift->status === 'assigned';
-    }
-
-    private function canClockOut(User $user, Shift $shift): bool
-    {
-        return $this->canClockIn($user, $shift);
-    }
-
-    private function getUserEmployers(User $user): array
-    {
-        return \App\Models\Employer::whereHas('agencies', function ($query) use ($user) {
-            $query->where('agencies.id', $user->agency?->id);
-        })->get()->toArray();
-    }
-
-    private function getUserLocations(User $user): array
-    {
-        return \App\Models\Location::whereHas('employer.agencies', function ($query) use ($user) {
-            $query->where('agencies.id', $user->agency?->id);
-        })->get()->toArray();
-    }
-
-    private function getUserAgencies(User $user): array
-    {
-        return \App\Models\Agency::whereHas('employers', function ($query) use ($user) {
-            $query->where('employers.id', $user->employer?->id);
-        })->get()->toArray();
     }
 
     private function acceptShiftOffer(User $user, $event, array $data): array
@@ -904,5 +692,80 @@ class CalendarEventsService
             'message' => 'Time off request approved successfully',
             'event' => $event
         ];
+    }
+
+    private function authorizeShiftManagement(User $user, Shift $shift): void
+    {
+        if (!in_array($user->role, ['agency_admin', 'agent']) || $shift->agency_id !== $user->agency?->id) {
+            throw new \Exception('Not authorized to manage this shift');
+        }
+    }
+
+    private function authorizeShiftCompletion(User $user, Shift $shift): void
+    {
+        if ($user->role !== 'employee' || $shift->employee_id !== $user->employee?->id) {
+            throw new \Exception('Not authorized to complete this shift');
+        }
+    }
+
+    private function authorizeShiftApproval(User $user, Shift $shift, string $approvalType): void
+    {
+        if ($approvalType === 'agency') {
+            if (!in_array($user->role, ['agency_admin', 'agent']) || $shift->agency_id !== $user->agency?->id) {
+                throw new \Exception('Not authorized to approve this shift for agency');
+            }
+        } else {
+            if (!in_array($user->role, ['employer_admin', 'contact']) || $shift->employer_id !== $user->employer?->id) {
+                throw new \Exception('Not authorized to approve this shift for employer');
+            }
+        }
+    }
+
+    private function authorizeClockIn(User $user, Shift $shift): void
+    {
+        if ($user->role !== 'employee' || $shift->employee_id !== $user->employee?->id || $shift->status !== 'assigned') {
+            throw new \Exception('Not authorized to clock in for this shift');
+        }
+    }
+
+    private function authorizeClockOut(User $user, Shift $shift): void
+    {
+        $this->authorizeClockIn($user, $shift);
+    }
+
+    private function getShiftRelations(User $user): array
+    {
+        return match ($user->role) {
+            'employee' => ['employer', 'location'],
+            'agency_admin', 'agent' => ['employer', 'employee', 'location'],
+            'employer_admin', 'contact' => ['agency', 'employee', 'location'],
+            default => []
+        };
+    }
+
+    private function shouldIncludeEntity(string $entityType, string $targetEntity): bool
+    {
+        return $entityType === 'all' || $entityType === $targetEntity;
+    }
+
+    private function getUserEmployers(User $user): array
+    {
+        return \App\Models\Employer::whereHas('agencies', function ($query) use ($user) {
+            $query->where('agencies.id', $user->agency?->id);
+        })->get()->toArray();
+    }
+
+    private function getUserLocations(User $user): array
+    {
+        return \App\Models\Location::whereHas('employer.agencies', function ($query) use ($user) {
+            $query->where('agencies.id', $user->agency?->id);
+        })->get()->toArray();
+    }
+
+    private function getUserAgencies(User $user): array
+    {
+        return \App\Models\Agency::whereHas('employers', function ($query) use ($user) {
+            $query->where('employers.id', $user->employer?->id);
+        })->get()->toArray();
     }
 }

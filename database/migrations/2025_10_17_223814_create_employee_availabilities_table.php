@@ -4,32 +4,33 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class () extends Migration {
-    public function up()
+return new class extends Migration
+{
+    public function up(): void
     {
         Schema::create('employee_availabilities', function (Blueprint $table) {
             $table->id();
             $table->foreignId('employee_id')->constrained()->onDelete('cascade');
-            $table->string('type')->default('recurring'); // recurring, one_time
-            $table->string('day_of_week')->nullable(); // mon, tue, wed, etc.
-            $table->date('start_date')->nullable(); // for one_time type
-            $table->date('end_date')->nullable(); // for one_time type
+            $table->date('start_date');
+            $table->date('end_date')->nullable();
+            $table->integer('days_mask');
             $table->time('start_time');
             $table->time('end_time');
-            $table->string('timezone')->default('UTC');
-            $table->string('status')->default('available'); // available, unavailable, preferred
+            $table->string('type')->default('preferred');
             $table->integer('priority')->default(1);
-            $table->json('location_preference')->nullable();
-            $table->integer('max_shift_length_hours')->nullable();
-            $table->integer('min_shift_length_hours')->nullable();
-            $table->text('notes')->nullable();
+            $table->integer('max_hours')->nullable();
+            $table->boolean('flexible')->default(false);
+            $table->json('constraints')->nullable();
             $table->timestamps();
 
-            $table->index(['employee_id', 'type']);
+            $table->index(['employee_id', 'days_mask']);
+            $table->index(['employee_id', 'start_date', 'end_date']);
+            $table->index(['start_time', 'end_time']);
+            $table->index(['type', 'priority']);
         });
     }
 
-    public function down()
+    public function down(): void
     {
         Schema::dropIfExists('employee_availabilities');
     }

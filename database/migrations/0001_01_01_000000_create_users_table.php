@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class () extends Migration {
+return new class() extends Migration {
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
@@ -18,9 +18,16 @@ return new class () extends Migration {
             $table->string('phone')->nullable();
             $table->string('status')->default('active');
 
-            $table->text('address')->nullable();
-            $table->date('date_of_birth')->nullable();
+            $table->string('address_line1')->nullable();
+            $table->string('address_line2')->nullable();
+            $table->string('city')->nullable();
+            $table->string('county')->nullable();
+            $table->string('postcode')->nullable();
+            $table->string('country', 2)->nullable()->default('GB');
+            $table->decimal('latitude', 10, 8)->nullable();
+            $table->decimal('longitude', 11, 8)->nullable();
 
+            $table->date('date_of_birth')->nullable();
             $table->string('emergency_contact_name')->nullable();
             $table->string('emergency_contact_phone')->nullable();
 
@@ -29,6 +36,11 @@ return new class () extends Migration {
 
             $table->rememberToken();
             $table->timestamps();
+
+            $table->index(['postcode']);
+            $table->index(['city']);
+            $table->index(['country']);
+            $table->index(['latitude', 'longitude']);
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {

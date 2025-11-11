@@ -18,13 +18,13 @@ class Agency extends Model
         'address',
         'city',
         'country',
-        'commission_rate',
+        'default_markup_percent',
         'subscription_status',
         'meta',
     ];
 
     protected $casts = [
-        'commission_rate' => 'decimal:2',
+        'default_markup_percent' => 'decimal:2',
         'meta' => 'array',
     ];
 
@@ -38,14 +38,14 @@ class Agency extends Model
         return $this->hasMany(Agent::class);
     }
 
-    public function employees()
+    public function agencyEmployees()
     {
-        return $this->hasMany(Employee::class);
+        return $this->hasMany(AgencyEmployee::class);
     }
 
-    public function employerAgencyLinks()
+    public function employerAgencyContracts()
     {
-        return $this->hasMany(EmployerAgencyLink::class);
+        return $this->hasMany(EmployerAgencyContract::class);
     }
 
     public function invoices()
@@ -68,13 +68,18 @@ class Agency extends Model
         return $this->hasMany(RateCard::class);
     }
 
-    public function shifts()
-    {
-        return $this->hasMany(Shift::class);
-    }
-
     public function subscriptions()
     {
         return $this->morphMany(Subscription::class, 'subscriber');
+    }
+
+    public function agencyResponses()
+    {
+        return $this->hasMany(AgencyResponse::class);
+    }
+
+    public function timeOffRequests()
+    {
+        return $this->hasMany(TimeOffRequest::class);
     }
 }
