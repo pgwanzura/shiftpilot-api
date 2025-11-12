@@ -17,3 +17,4 @@ class AgencyResponseRejected
         $this->agencyResponse = $agencyResponse;
     }
 }
+

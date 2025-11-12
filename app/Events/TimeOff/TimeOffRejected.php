@@ -17,3 +17,4 @@ class TimeOffRejected
         $this->timeOffRequest = $timeOffRequest;
     }
 }
+

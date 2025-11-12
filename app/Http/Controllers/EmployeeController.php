@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Employee;
+namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Employee\SetAvailabilityRequest;
@@ -26,8 +26,7 @@ class EmployeeController extends Controller
 {
     public function __construct(
         private EmployeeService $employeeService
-    ) {
-    }
+    ) {}
 
     public function dashboardStats(): JsonResponse
     {

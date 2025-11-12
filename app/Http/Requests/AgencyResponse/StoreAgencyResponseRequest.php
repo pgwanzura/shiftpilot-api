@@ -1,10 +1,10 @@
 <?php
 
-namespace App\Http\Requests\Assignment;
+namespace App\Http\Requests\AgencyResponse;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class ExtendAssignmentRequest extends FormRequest
+class StoreAgencyResponseRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -24,9 +24,11 @@ class ExtendAssignmentRequest extends FormRequest
     public function rules()
     {
         return [
-            'end_date' => 'required|date|after:today',
-            'reason' => 'sometimes|string|max:500',
-            'notes' => 'nullable|string|max:1000',
+            'shift_request_id' => 'required|exists:shift_requests,id',
+            'agency_id' => 'required|exists:agencies,id',
+            'proposed_employee_id' => 'nullable|exists:employees,id',
+            'proposed_rate' => 'required|numeric|min:0',
+            'notes' => 'nullable|string',
         ];
     }
 }

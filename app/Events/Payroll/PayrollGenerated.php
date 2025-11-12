@@ -17,3 +17,4 @@ class PayrollGenerated
         $this->payroll = $payroll;
     }
 }
+

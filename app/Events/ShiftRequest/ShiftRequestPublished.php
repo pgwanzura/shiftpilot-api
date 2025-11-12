@@ -17,3 +17,4 @@ class ShiftRequestPublished
         $this->shiftRequest = $shiftRequest;
     }
 }
+

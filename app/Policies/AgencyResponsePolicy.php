@@ -47,3 +47,4 @@ class AgencyResponsePolicy
         return $user->isAgent() && $user->agency->id === $agencyResponse->agency_id && $agencyResponse->isPending();
     }
 }
+

@@ -10,12 +10,11 @@ use App\Services\TimeOffService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-class TimeOffController extends Controller
+class TimeOffRequestController extends Controller
 {
     public function __construct(
         private TimeOffService $timeOffService
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): JsonResponse
     {

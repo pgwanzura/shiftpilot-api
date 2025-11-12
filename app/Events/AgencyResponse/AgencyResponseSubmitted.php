@@ -17,3 +17,4 @@ class AgencyResponseSubmitted
         $this->agencyResponse = $agencyResponse;
     }
 }
+
