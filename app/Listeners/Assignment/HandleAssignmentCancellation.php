@@ -53,4 +53,3 @@ class HandleAssignmentCancellation implements ShouldQueue
         ]);
     }
 }
-`z
