@@ -22,9 +22,6 @@ class AssignmentController extends Controller
         private AssignmentService $assignmentService
     ) {}
 
-    /**
-     * Display a listing of the resource.
-     */
     public function index(Request $request): AssignmentCollection
     {
         $this->authorize('viewAny', Assignment::class);
@@ -40,7 +37,6 @@ class AssignmentController extends Controller
             'createdBy'
         ]);
 
-        // Apply filters
         $this->applyFilters($query, $request);
 
         $assignments = $query->latest()->paginate($request->per_page ?? 20);
@@ -48,9 +44,6 @@ class AssignmentController extends Controller
         return new AssignmentCollection($assignments);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(StoreAssignmentRequest $request): JsonResponse
     {
         $assignment = $this->assignmentService->createAssignment(
@@ -221,9 +214,6 @@ class AssignmentController extends Controller
         ]);
     }
 
-    /**
-     * Extend assignment
-     */
     public function extend(ExtendAssignmentRequest $request, Assignment $assignment): JsonResponse
     {
         $assignment = $this->assignmentService->extendAssignment(
@@ -238,9 +228,6 @@ class AssignmentController extends Controller
         ]);
     }
 
-    /**
-     * Get assignment statistics
-     */
     public function statistics(Request $request): JsonResponse
     {
         $this->authorize('viewAny', Assignment::class);
@@ -257,9 +244,6 @@ class AssignmentController extends Controller
         ]);
     }
 
-    /**
-     * Get assignments for current user
-     */
     public function myAssignments(Request $request): AssignmentCollection
     {
         $user = $request->user();
@@ -285,7 +269,6 @@ class AssignmentController extends Controller
             });
         }
 
-        // Apply filters
         $this->applyFilters($query, $request);
 
         $assignments = $query->latest()->paginate($request->per_page ?? 20);
@@ -293,36 +276,29 @@ class AssignmentController extends Controller
         return new AssignmentCollection($assignments);
     }
 
-    /**
-     * Apply filters to query
-     */
     private function applyFilters($query, Request $request): void
     {
-        // Filter by status
+
         if ($request->has('status')) {
             $query->where('status', $request->status);
         }
 
-        // Filter by assignment type
         if ($request->has('assignment_type')) {
             $query->where('assignment_type', $request->assignment_type);
         }
 
-        // Filter by agency
         if ($request->has('agency_id') && $request->user()->isAgency()) {
             $query->whereHas('agencyEmployee', function ($q) use ($request) {
                 $q->where('agency_id', $request->agency_id);
             });
         }
 
-        // Filter by employer
         if ($request->has('employer_id') && $request->user()->isEmployer()) {
             $query->whereHas('contract', function ($q) use ($request) {
                 $q->where('employer_id', $request->employer_id);
             });
         }
 
-        // Filter by date range
         if ($request->has(['start_date', 'end_date'])) {
             $query->dateRange($request->start_date, $request->end_date);
         } elseif ($request->has('start_date')) {
@@ -334,12 +310,10 @@ class AssignmentController extends Controller
             });
         }
 
-        // Search by role
         if ($request->has('search')) {
             $query->where('role', 'like', '%' . $request->search . '%');
         }
 
-        // Filter by location
         if ($request->has('location_id')) {
             $query->where('location_id', $request->location_id);
         }

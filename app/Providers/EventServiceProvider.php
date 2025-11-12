@@ -13,48 +13,61 @@ class EventServiceProvider extends ServiceProvider
         ],
         \App\Events\Location\LocationUpdated::class => [
             \App\Listeners\LogLocationActivity::class,
+            \App\Listeners\AuditLogListener::class,
         ],
 
         \App\Events\UserRegistered::class => [
             \App\Listeners\SendUserWelcomeNotification::class,
+            \App\Listeners\AuditLogListener::class,
         ],
 
         \App\Events\Shift\ShiftCreated::class => [
             \App\Listeners\LogShiftActivity::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\Shift\ShiftCancelled::class => [
             \App\Listeners\LogShiftActivity::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         // Renamed from ShiftRequested to ShiftRequestCreated
         \App\Events\ShiftRequest\ShiftRequestCreated::class => [
             \App\Listeners\ProcessShiftRequested::class, // Assuming this listener handles creation
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\ShiftRequest\ShiftRequestPublished::class => [
             // Add a listener for this event, e.g., NotifyAgenciesForShiftRequest::class
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\Shift\ShiftOffered::class => [
             \App\Listeners\ProcessShiftOffered::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\Shift\ShiftAssigned::class => [
             \App\Listeners\ProcessShiftAssigned::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\Shift\ShiftCompleted::class => [
             \App\Listeners\ProcessShiftCompleted::class,
+            \App\Listeners\AuditLogListener::class,
         ],
 
         \App\Events\Shift\ShiftOfferSent::class => [
             \App\Listeners\ProcessShiftOfferSent::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\Shift\ShiftOfferAccepted::class => [
             \App\Listeners\ProcessShiftOfferAccepted::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\Shift\ShiftOfferRejected::class => [
             \App\Listeners\ProcessShiftOfferRejected::class,
+            \App\Listeners\AuditLogListener::class,
         ],
 
         \App\Events\Timesheet\TimesheetSubmitted::class => [
             \App\Listeners\LogTimesheetActivity::class,
             \App\Listeners\ProcessTimesheetSubmitted::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         // Generic TimesheetApproved/Rejected are assumed to be replaced by specific ones if schema is primary
         // \App\Events\Timesheet\TimesheetApproved::class => [
@@ -65,23 +78,29 @@ class EventServiceProvider extends ServiceProvider
         // ],
         \App\Events\Timesheet\TimesheetAgencyApproved::class => [
             \App\Listeners\ProcessTimesheetAgencyApproved::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\Timesheet\TimesheetEmployerApproved::class => [
             \App\Listeners\ProcessTimesheetEmployerApproved::class,
+            \App\Listeners\AuditLogListener::class,
         ],
 
         \App\Events\InvoiceGenerated::class => [
             \App\Listeners\SendInvoiceNotification::class,
             \App\Listeners\ProcessInvoiceGenerated::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\InvoicePaid::class => [
             \App\Listeners\ProcessInvoicePaid::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\Payroll\PayrollGenerated::class => [
             // Add a listener for this event, e.g., ProcessPayrollRecords::class
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\PayoutProcessed::class => [
             \App\Listeners\ProcessPayoutProcessed::class,
+            \App\Listeners\AuditLogListener::class,
         ],
 
         // Removed placeholder Payment Events - not defined in schema listeners
@@ -99,29 +118,37 @@ class EventServiceProvider extends ServiceProvider
 
         \App\Events\AvailabilityUpdated::class => [
             \App\Listeners\ProcessAvailabilityUpdated::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\TimeOff\TimeOffRequested::class => [
             \App\Listeners\ProcessTimeOffRequested::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\TimeOff\TimeOffApproved::class => [
             \App\Listeners\ProcessTimeOffApproved::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\TimeOff\TimeOffRejected::class => [
             // Add a listener for this event, e.g., NotifyEmployeeOfTimeOffRejection::class
+            \App\Listeners\AuditLogListener::class,
         ],
 
         \App\Events\SubscriptionRenewed::class => [
             \App\Listeners\ProcessSubscriptionRenewed::class,
+            \App\Listeners\AuditLogListener::class,
         ],
 
         \App\Events\Assignment\AssignmentCreated::class => [
             \App\Listeners\Assignment\SendAssignmentCreatedNotifications::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\Assignment\AssignmentStatusChanged::class => [
             \App\Listeners\Assignment\SendAssignmentStatusChangeNotifications::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         \App\Events\Assignment\AssignmentCompleted::class => [
             \App\Listeners\Assignment\HandleAssignmentCompletion::class,
+            \App\Listeners\AuditLogListener::class,
         ],
         // Removed placeholder AssignmentExtended Event - not defined in schema listeners
         // \App\Events\Assignment\AssignmentExtended::class => [
@@ -129,6 +156,7 @@ class EventServiceProvider extends ServiceProvider
         // ],
         \App\Events\Assignment\AssignmentCancelled::class => [
             \App\Listeners\Assignment\HandleAssignmentCancellation::class,
+            \App\Listeners\AuditLogListener::class,
         ],
     ];
 

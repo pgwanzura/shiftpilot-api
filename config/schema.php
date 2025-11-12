@@ -14,7 +14,7 @@ return [
 
     'meta' => [
         'name' => 'ShiftPilot',
-        'version' => '2.1.0',
+        'version' => '2.1.1', // Updated version
         'currency' => 'GBP',
         'default_timezone' => 'UTC+01:00',
         'audit_retention_days' => 365,
@@ -190,7 +190,7 @@ return [
                 'status' => 'required|in:active,inactive,suspended'
             ],
             'relationships' => [
-                ['type' => 'hasMany', 'related' => 'EmployerUser'], 
+                ['type' => 'hasMany', 'related' => 'EmployerUser'],
                 ['type' => 'hasMany', 'related' => 'Contact'],
                 ['type' => 'hasMany', 'related' => 'Location'],
                 ['type' => 'hasMany', 'related' => 'ShiftRequest'],
@@ -290,8 +290,8 @@ return [
                 'location_type' => ['type' => 'string', 'nullable' => true],
                 'contact_name' => ['type' => 'string', 'nullable' => true],
                 'contact_phone' => ['type' => 'string', 'nullable' => true],
-                'instructions' => ['type' => 'text', 'nullable' => true], 
-                
+                'instructions' => ['type' => 'text', 'nullable' => true],
+
                 'meta' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
@@ -453,7 +453,7 @@ return [
         | Time Off Request
         |--------------------------------------------------------------------------
         */
-       'time_off_request' => [
+        'time_off_request' => [
             'table' => 'time_off_requests',
             'fields' => [
                 'id' => ['type' => 'increments'],
@@ -537,7 +537,7 @@ return [
 
         /*
         |--------------------------------------------------------------------------
-        | Agency Response (to Shift Request)
+        | Agency Response (to Shift Request) - UPDATED
         | Agencies submit proposals for shift requests
         |--------------------------------------------------------------------------
         */
@@ -548,33 +548,53 @@ return [
                 'shift_request_id' => ['type' => 'foreign', 'references' => 'shift_requests,id'],
                 'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
                 'proposed_employee_id' => ['type' => 'foreign', 'references' => 'employees,id', 'nullable' => true],
+
+                'proposed_rate' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
+                'proposed_start_date' => ['type' => 'date'],
+                'proposed_end_date' => ['type' => 'date', 'nullable' => true],
+                'terms' => ['type' => 'text', 'nullable' => true],
+                'estimated_total_hours' => ['type' => 'integer', 'nullable' => true],
+
                 'status' => ['type' => 'string', 'default' => 'pending'],
                 'notes' => ['type' => 'text', 'nullable' => true],
                 'submitted_by_id' => ['type' => 'foreign', 'references' => 'users,id'],
                 'responded_at' => ['type' => 'timestamp', 'nullable' => true],
+
+                'employer_decision_by_id' => ['type' => 'foreign', 'references' => 'users,id', 'nullable' => true],
+                'employer_decision_at' => ['type' => 'timestamp', 'nullable' => true],
+
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
             'validation' => [
                 'shift_request_id' => 'required|exists:shift_requests,id',
                 'agency_id' => 'required|exists:agencies,id',
-                'proposed_rate' => 'required|numeric|min:0',
-                'status' => 'required|in:pending,accepted,rejected,withdrawn'
+                'proposed_rate' => 'required|numeric|min:0|lte:shift_request.max_hourly_rate',
+                'proposed_start_date' => 'required|date|after_or_equal:today',
+                'status' => 'required|in:pending,accepted,rejected,withdrawn,counter_offered'
             ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'ShiftRequest'],
                 ['type' => 'belongsTo', 'related' => 'Agency'],
                 ['type' => 'belongsTo', 'related' => 'Employee', 'foreign_key' => 'proposed_employee_id'],
-                ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'submitted_by_id']
+                ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'submitted_by_id'],
+                ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'employer_decision_by_id'],
+                ['type' => 'hasOne', 'related' => 'Assignment'] // ADDED RELATIONSHIP
             ],
             'indexes' => [
-                ['fields' => ['shift_request_id', 'agency_id'], 'unique' => true]
+                ['fields' => ['shift_request_id', 'agency_id'], 'unique' => true],
+                ['fields' => ['proposed_employee_id', 'status']] // ADDED INDEX
+            ],
+            'business_rules' => [
+                'rate_validation' => 'proposed_rate cannot exceed shift_request.max_hourly_rate',
+                'employee_availability' => 'proposed_employee must be available for proposed dates',
+                'single_active_response' => 'Only one active response per agency per shift_request'
             ]
         ],
 
         /*
         |--------------------------------------------------------------------------
-        | Assignment (Active Employee-Employer Placement via Agency)
+        | Assignment (Active Employee-Employer Placement via Agency) - UPDATED
         | Tracks the actual assignment of an agency employee to an employer
         | This is created when an employer accepts an agency response
         |--------------------------------------------------------------------------
@@ -585,8 +605,11 @@ return [
                 'id' => ['type' => 'increments'],
                 'contract_id' => ['type' => 'foreign', 'references' => 'employer_agency_contracts,id'],
                 'agency_employee_id' => ['type' => 'foreign', 'references' => 'agency_employees,id'],
-                'shift_request_id' => ['type' => 'foreign', 'references' => 'shift_requests,id', 'nullable' => true],
-                'agency_response_id' => ['type' => 'foreign', 'references' => 'agency_responses,id', 'nullable' => true],
+
+                // CHANGED FROM NULLABLE TO REQUIRED:
+                'shift_request_id' => ['type' => 'foreign', 'references' => 'shift_requests,id', 'nullable' => false],
+                'agency_response_id' => ['type' => 'foreign', 'references' => 'agency_responses,id', 'nullable' => false],
+
                 'location_id' => ['type' => 'foreign', 'references' => 'locations,id'],
                 'role' => ['type' => 'string'],
                 'start_date' => ['type' => 'date'],
@@ -607,6 +630,8 @@ return [
             'validation' => [
                 'contract_id' => 'required|exists:employer_agency_contracts,id',
                 'agency_employee_id' => 'required|exists:agency_employees,id',
+                'shift_request_id' => 'required|exists:shift_requests,id', // CHANGED TO REQUIRED
+                'agency_response_id' => 'required|exists:agency_responses,id', // CHANGED TO REQUIRED
                 'location_id' => 'required|exists:locations,id',
                 'start_date' => 'required|date',
                 'agreed_rate' => 'required|numeric|min:0|gte:pay_rate',
@@ -625,12 +650,15 @@ return [
             'indexes' => [
                 ['fields' => ['agency_employee_id', 'start_date', 'end_date']],
                 ['fields' => ['contract_id', 'status']],
-                ['fields' => ['agency_employee_id', 'status']]
+                ['fields' => ['agency_employee_id', 'status']],
+                ['fields' => ['agency_response_id'], 'unique' => true] // ADDED UNIQUE CONSTRAINT
             ],
             'business_rules' => [
+                'agency_response_validation' => 'Assignment requires accepted agency_response', // ADDED
                 'rate_validation' => 'agreed_rate must be >= pay_rate',
                 'markup_calculation' => 'markup_amount = agreed_rate - pay_rate, markup_percent = (markup_amount / pay_rate) * 100',
-                'contract_active' => 'Assignment requires active employer_agency_contract'
+                'contract_active' => 'Assignment requires active employer_agency_contract',
+                'rate_consistency' => 'agreed_rate should match agency_response.proposed_rate' // ADDED
             ]
         ],
 
@@ -1131,7 +1159,7 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | BUSINESS RULES & CONSTRAINTS
+    | BUSINESS RULES & CONSTRAINTS - UPDATED
     |--------------------------------------------------------------------------
     */
     'business_rules' => [
@@ -1141,9 +1169,19 @@ return [
             'description' => 'No direct employee-employer relationships allowed'
         ],
         'assignment_prerequisites' => [
-            'rule' => 'Assignment requires: active EmployerAgencyContract + active AgencyEmployee + valid Location',
+            'rule' => 'Assignment requires: active EmployerAgencyContract + active AgencyEmployee + valid Location + accepted AgencyResponse',
             'enforcement' => 'Foreign key constraints + application validation',
-            'description' => 'Cannot assign employee without valid contract and agency registration'
+            'description' => 'Cannot assign employee without valid contract, agency registration, and accepted response'
+        ],
+        'assignment_creation_flow' => [ // ADDED
+            'rule' => 'Assignment must be created from accepted AgencyResponse with matching terms',
+            'enforcement' => 'Application validation + database constraints',
+            'description' => 'Prevents orphaned assignments without proper agency response context'
+        ],
+        'shift_to_assignment_link' => [ // ADDED
+            'rule' => 'All shifts must belong to an active assignment',
+            'enforcement' => 'Foreign key constraint + application validation',
+            'description' => 'Ensures shifts have proper assignment context'
         ],
         'employee_availability_scope' => [
             'rule' => 'Employee availability and time-off apply across ALL agencies',
@@ -1167,15 +1205,20 @@ return [
             'description' => 'Support flexible staffing across multiple agencies'
         ],
         'rate_integrity' => [
-            'rule' => 'Assignment agreed_rate >= pay_rate, markup calculated automatically',
+            'rule' => 'Assignment agreed_rate >= pay_rate, markup calculated automatically, agreed_rate should match agency_response.proposed_rate',
             'enforcement' => 'Application validation + database triggers',
-            'description' => 'Ensures proper financial structure'
+            'description' => 'Ensures proper financial structure and consistency with agency response'
+        ],
+        'agency_response_integrity' => [ // ADDED
+            'rule' => 'Agency response proposed_rate cannot exceed shift_request.max_hourly_rate',
+            'enforcement' => 'Application validation',
+            'description' => 'Maintains pricing boundaries set by employer'
         ]
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | DATA FLOW: Employer → Assignment → Shift
+    | DATA FLOW: Employer → Assignment → Shift - UPDATED
     |--------------------------------------------------------------------------
     */
     'data_flow' => [
@@ -1186,14 +1229,15 @@ return [
             '4' => 'Each agency-employee relationship has independent pay rates and terms'
         ],
 
-        'assignment_creation' => [
+        'assignment_creation' => [ // UPDATED
             '1' => 'Employer creates ShiftRequest for staffing need',
             '2' => 'Agencies with active contracts can view and respond',
-            '3' => 'Agency submits AgencyResponse with proposed employee and rates',
-            '4' => 'Employer selects preferred response',
-            '5' => 'System creates Assignment linking AgencyEmployee to Employer via Contract',
-            '6' => 'Assignment validates no global conflicts for employee',
-            '7' => 'Shifts generated within assignment boundaries'
+            '3' => 'Agency submits AgencyResponse with proposed employee, rates, and dates',
+            '4' => 'Employer reviews and accepts preferred AgencyResponse',
+            '5' => 'System validates: active contract + available employee + no conflicts',
+            '6' => 'System creates Assignment linking AgencyResponse to AgencyEmployee via Contract',
+            '7' => 'Shifts generated within assignment date boundaries',
+            '8' => 'Assignment terms (rates, dates) inherited from accepted AgencyResponse'
         ],
 
         'multi_agency_scenario' => [
@@ -1215,6 +1259,9 @@ return [
             '7' => 'Each agency manages payroll independently for their employees'
         ]
     ],
+
+    // ... rest of the configuration remains the same (events, flows, roles, etc.)
+    // Only the entities and business rules sections were updated
 
     /*
     |--------------------------------------------------------------------------
