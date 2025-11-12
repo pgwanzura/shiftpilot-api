@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 
-class Notification extends Model
+class SystemNotification extends Model
 {
-    use HasFactory;
+    protected $table = 'system_notifications'; // Explicitly define table name
 
     protected $fillable = [
         'recipient_type',
@@ -20,12 +20,12 @@ class Notification extends Model
     ];
 
     protected $casts = [
-        'payload' => 'array',
         'is_read' => 'boolean',
         'sent_at' => 'datetime',
+        'payload' => 'array',
     ];
 
-    public function recipient()
+    public function recipient(): MorphTo
     {
         return $this->morphTo();
     }

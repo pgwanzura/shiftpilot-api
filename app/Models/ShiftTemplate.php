@@ -13,44 +13,35 @@ class ShiftTemplate extends Model
     use HasFactory;
 
     protected $fillable = [
-        'employer_id',
-        'location_id',
+        'assignment_id',
         'title',
         'description',
         'day_of_week',
         'start_time',
         'end_time',
-        'role_requirement',
-        'required_qualifications',
-        'hourly_rate',
         'recurrence_type',
         'status',
-        'start_date',
-        'end_date',
-        'created_by_type',
-        'created_by_id',
+        'effective_start_date',
+        'effective_end_date',
+        'last_generated_date',
         'meta',
     ];
 
     protected $casts = [
-        'required_qualifications' => 'array',
-        'hourly_rate' => 'decimal:2',
-        'start_date' => 'date',
-        'end_date' => 'date',
+        'start_time' => 'datetime',
+        'end_time' => 'datetime',
+        'effective_start_date' => 'date',
+        'effective_end_date' => 'date',
+        'last_generated_date' => 'date',
         'meta' => 'array',
         'day_of_week' => DayOfWeek::class,
         'recurrence_type' => RecurrenceType::class,
         'status' => ShiftTemplateStatus::class,
     ];
 
-    public function employer()
+    public function assignment()
     {
-        return $this->belongsTo(Employer::class);
-    }
-
-    public function location()
-    {
-        return $this->belongsTo(Location::class);
+        return $this->belongsTo(Assignment::class);
     }
 
     public function shifts()
@@ -58,9 +49,19 @@ class ShiftTemplate extends Model
         return $this->hasMany(Shift::class);
     }
 
-    public function createdBy()
+    public function getEmployerAttribute()
     {
-        return $this->morphTo();
+        return $this->assignment->contract->employer;
+    }
+
+    public function getLocationAttribute()
+    {
+        return $this->assignment->location;
+    }
+
+    public function getRoleAttribute()
+    {
+        return $this->assignment->role;
     }
 
     public function isActive(): bool
@@ -73,5 +74,18 @@ class ShiftTemplate extends Model
         $start = \Carbon\Carbon::parse($this->start_time);
         $end = \Carbon\Carbon::parse($this->end_time);
         return $start->diff($end)->format('%H:%I');
+    }
+
+    public function isEffectiveOn(\Carbon\Carbon $date): bool
+    {
+        if ($this->effective_start_date && $date->lt($this->effective_start_date)) {
+            return false;
+        }
+
+        if ($this->effective_end_date && $date->gt($this->effective_end_date)) {
+            return false;
+        }
+
+        return true;
     }
 }

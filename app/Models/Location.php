@@ -53,6 +53,16 @@ class Location extends Model
         return $this->hasMany(Shift::class);
     }
 
+    public function assignments()
+    {
+        return $this->hasMany(Assignment::class, 'location_id');
+    }
+
+    public function rateCards()
+    {
+        return $this->hasMany(RateCard::class);
+    }
+
     public function getFullAddressAttribute()
     {
         return collect([

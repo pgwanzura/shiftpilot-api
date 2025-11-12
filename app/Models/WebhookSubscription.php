@@ -12,13 +12,18 @@ class WebhookSubscription extends Model
     protected $table = 'webhook_subscriptions';
 
     protected $fillable = [
-        'owner_type', 'owner_id', 'url', 'events', 'secret',
-        'status', 'last_delivery_at'
+        'owner_type',
+        'owner_id',
+        'url',
+        'events',
+        'secret',
+        'status',
+        'last_delivery_at',
     ];
 
     protected $casts = [
         'events' => 'array',
-        'last_delivery_at' => 'datetime'
+        'last_delivery_at' => 'datetime',
     ];
 
     public function owner()

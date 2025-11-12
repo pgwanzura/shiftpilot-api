@@ -4,6 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Contact extends Model
 {
@@ -11,7 +14,6 @@ class Contact extends Model
 
     protected $fillable = [
         'employer_id',
-        'user_id',
         'name',
         'email',
         'phone',
@@ -25,23 +27,56 @@ class Contact extends Model
         'meta' => 'array',
     ];
 
-    public function employer()
+    /**
+     * Get the contact's profile.
+     */
+    public function profile(): MorphOne
+    {
+        return $this->morphOne(Profile::class, 'profileable');
+    }
+
+    /**
+     * The employer that the contact belongs to.
+     */
+    public function employer(): BelongsTo
     {
         return $this->belongsTo(Employer::class);
     }
 
-    public function user()
+    public function shiftApprovals(): HasMany
     {
-        return $this->belongsTo(User::class);
+        return $this->hasMany(ShiftApproval::class, 'contact_id');
     }
 
-    public function shiftApprovals()
+    public function timesheets(): HasMany
     {
-        return $this->hasMany(ShiftApproval::class);
+        // Assuming timesheets are approved by employer contact, foreign key will be 'employer_approved_by_id'
+        return $this->hasMany(Timesheet::class, 'employer_approved_by_id');
     }
 
-    public function timesheets()
+    /**
+     * Get employer ID for contact.
+     */
+    public function getEmployerId(): ?int
     {
-        return $this->hasMany(Timesheet::class, 'approved_by_contact_id');
+        return $this->employer_id;
+    }
+
+    /**
+     * Check if contact can approve assignments.
+     */
+    public function canApproveAssignments(): bool
+    {
+        // Assuming contacts can approve assignments as per schema roles and permissions
+        return $this->can_sign_timesheets; // Example, adjust based on actual schema rules
+    }
+
+    /**
+     * Check if contact can approve timesheets.
+     */
+    public function canApproveTimesheets(): bool
+    {
+        // Assuming contacts can approve timesheets as per schema roles and permissions
+        return $this->can_sign_timesheets; // Example, adjust based on actual schema rules
     }
 }

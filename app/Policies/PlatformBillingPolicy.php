@@ -2,65 +2,49 @@
 
 namespace App\Policies;
 
-use App\Models\PlatformBilling;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
+use App\Models\PlatformBilling;
+use Illuminate\Auth\Access\HandlesAuthorization;
 
 class PlatformBillingPolicy
 {
-    /**
-     * Determine whether the user can view any models.
-     */
-    public function viewAny(User $user): bool
+    use HandlesAuthorization;
+
+    public function before(User $user, $ability)
     {
-        return false;
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
     }
 
-    /**
-     * Determine whether the user can view the model.
-     */
-    public function view(User $user, PlatformBilling $platformBilling): bool
+    public function viewAny(User $user)
     {
-        return false;
+        // Only Super Admin can view all platform billing records
+        return $user->isSuperAdmin();
     }
 
-    /**
-     * Determine whether the user can create models.
-     */
-    public function create(User $user): bool
+    public function view(User $user, PlatformBilling $platformBilling)
     {
-        return false;
+        // Only Super Admin can view any specific platform billing record
+        // Agency Admin might view their own platform fees (handled by InvoicePolicy or specific query)
+        return $user->isSuperAdmin();
     }
 
-    /**
-     * Determine whether the user can update the model.
-     */
-    public function update(User $user, PlatformBilling $platformBilling): bool
+    public function create(User $user)
     {
-        return false;
+        // Only Super Admin can create platform billing records
+        return $user->isSuperAdmin();
     }
 
-    /**
-     * Determine whether the user can delete the model.
-     */
-    public function delete(User $user, PlatformBilling $platformBilling): bool
+    public function update(User $user, PlatformBilling $platformBilling)
     {
-        return false;
+        // Only Super Admin can update platform billing records
+        return $user->isSuperAdmin();
     }
 
-    /**
-     * Determine whether the user can restore the model.
-     */
-    public function restore(User $user, PlatformBilling $platformBilling): bool
+    public function delete(User $user, PlatformBilling $platformBilling)
     {
-        return false;
-    }
-
-    /**
-     * Determine whether the user can permanently delete the model.
-     */
-    public function forceDelete(User $user, PlatformBilling $platformBilling): bool
-    {
-        return false;
+        // Only Super Admin can delete platform billing records
+        return $user->isSuperAdmin();
     }
 }

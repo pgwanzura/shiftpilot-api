@@ -9,16 +9,15 @@ class Timesheet extends Model
 {
     protected $fillable = [
         'shift_id',
-        'employee_id',
         'clock_in',
         'clock_out',
         'break_minutes',
         'hours_worked',
         'status',
-        'agency_approved_by',
+        'agency_approved_by_id',
         'agency_approved_at',
-        'approved_by_contact_id',
-        'approved_at',
+        'employer_approved_by_id',
+        'employer_approved_at',
         'notes',
         'attachments',
     ];
@@ -28,7 +27,7 @@ class Timesheet extends Model
         'clock_out' => 'datetime',
         'hours_worked' => 'decimal:2',
         'agency_approved_at' => 'datetime',
-        'approved_at' => 'datetime',
+        'employer_approved_at' => 'datetime',
         'attachments' => 'array',
     ];
 
@@ -44,11 +43,11 @@ class Timesheet extends Model
 
     public function agencyApprovedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'agency_approved_by');
+        return $this->belongsTo(User::class, 'agency_approved_by_id');
     }
 
-    public function approvedByContact(): BelongsTo
+    public function employerApprovedBy(): BelongsTo
     {
-        return $this->belongsTo(Contact::class, 'approved_by_contact_id');
+        return $this->belongsTo(Contact::class, 'employer_approved_by_id');
     }
 }

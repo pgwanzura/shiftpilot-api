@@ -13,14 +13,16 @@ class AgencyResponse extends Model
         'shift_request_id',
         'agency_id',
         'proposed_employee_id',
+        'proposed_rate',
         'status',
         'notes',
         'submitted_by_id',
-        'responded_at',
+        'responded_at'
     ];
 
     protected $casts = [
         'responded_at' => 'datetime',
+        'proposed_rate' => 'decimal:2',
     ];
 
     public function shiftRequest()

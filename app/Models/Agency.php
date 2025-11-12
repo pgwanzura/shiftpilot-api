@@ -4,13 +4,16 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Agency extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'user_id',
         'name',
         'legal_name',
         'registration_number',
@@ -28,58 +31,86 @@ class Agency extends Model
         'meta' => 'array',
     ];
 
-    public function user()
+    /**
+     * Get the agency's profile.
+     */
+    public function profile(): MorphOne
     {
-        return $this->belongsTo(User::class);
+        return $this->morphOne(Profile::class, 'profileable');
     }
 
-    public function agents()
+    public function agents(): HasMany
     {
         return $this->hasMany(Agent::class);
     }
 
-    public function agencyEmployees()
+    public function agencyEmployees(): HasMany
     {
         return $this->hasMany(AgencyEmployee::class);
     }
 
-    public function employerAgencyContracts()
+    public function employerAgencyContracts(): HasMany
     {
         return $this->hasMany(EmployerAgencyContract::class);
     }
 
-    public function invoices()
+    public function invoices(): HasMany
     {
         return $this->hasMany(Invoice::class);
     }
 
-    public function payrolls()
+    public function payrolls(): HasMany
     {
         return $this->hasMany(Payroll::class);
     }
 
-    public function payouts()
+    public function payouts(): HasMany
     {
         return $this->hasMany(Payout::class);
     }
 
-    public function rateCards()
+    public function rateCards(): HasMany
     {
         return $this->hasMany(RateCard::class);
     }
 
-    public function subscriptions()
+    public function subscriptions(): MorphMany
     {
         return $this->morphMany(Subscription::class, 'subscriber');
     }
 
-    public function agencyResponses()
+    public function agencyResponses(): HasMany
     {
         return $this->hasMany(AgencyResponse::class);
     }
 
-    public function timeOffRequests()
+    public function timeOffRequests(): HasMany
     {
         return $this->hasMany(TimeOffRequest::class);
+    }
+
+    /**
+     * Get agency ID for agency.
+     */
+    public function getAgencyId(): ?int
+    {
+        return $this->id;
+    }
+
+    /**
+     * Agency cannot approve assignments directly.
+     */
+    public function canApproveAssignments(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Agency can approve timesheets.
+     */
+    public function canApproveTimesheets(): bool
+    {
+        // Assuming agency can approve timesheets as per schema roles
+        return true;
     }
 }

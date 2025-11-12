@@ -23,14 +23,14 @@ class Subscription extends Model
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'meta' => 'array',
         'started_at' => 'datetime',
         'current_period_start' => 'datetime',
         'current_period_end' => 'datetime',
-        'meta' => 'array',
     ];
 
-    public function subscriber(): MorphTo
+    public function subscriber()
     {
-        return $this->morphTo('entity');
+        return $this->morphTo();
     }
 }

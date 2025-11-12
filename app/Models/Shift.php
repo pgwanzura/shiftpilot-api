@@ -33,7 +33,6 @@ class Shift extends Model
         'start_time' => 'datetime',
         'end_time' => 'datetime',
         'hourly_rate' => 'decimal:2',
-        'status' => ShiftStatus::class,
         'meta' => 'array',
     ];
 

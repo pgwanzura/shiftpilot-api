@@ -690,31 +690,61 @@ return [
             'table' => 'shift_templates',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'assignment_id' => ['type' => 'foreign', 'references' => 'assignments,id'],
-                'title' => ['type' => 'string'],
+                'assignment_id' => ['type' => 'foreign', 'references' => 'assignments,id', 'on_delete' => 'cascade'],
+                'title' => ['type' => 'string', 'nullable' => false],
                 'description' => ['type' => 'text', 'nullable' => true],
-                'day_of_week' => ['type' => 'string'],
-                'start_time' => ['type' => 'time'],
-                'end_time' => ['type' => 'time'],
+                'day_of_week' => ['type' => 'string', 'nullable' => false],
+                'start_time' => ['type' => 'time', 'nullable' => false],
+                'end_time' => ['type' => 'time', 'nullable' => false],
                 'recurrence_type' => ['type' => 'string', 'default' => 'weekly'],
+                'timezone' => ['type' => 'string', 'default' => 'UTC'],
                 'status' => ['type' => 'string', 'default' => 'active'],
                 'effective_start_date' => ['type' => 'date', 'nullable' => true],
                 'effective_end_date' => ['type' => 'date', 'nullable' => true],
                 'last_generated_date' => ['type' => 'date', 'nullable' => true],
+                'max_occurrences' => ['type' => 'integer', 'nullable' => true],
+                'auto_publish' => ['type' => 'boolean', 'default' => false],
+                'generation_count' => ['type' => 'integer', 'default' => 0],
                 'meta' => ['type' => 'json', 'nullable' => true],
+                'created_by_id' => ['type' => 'foreign', 'references' => 'users,id'],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
             'validation' => [
                 'assignment_id' => 'required|exists:assignments,id',
-                'day_of_week' => 'required|in:mon,tue,wed,thu,fri,sat,sun',
+                'title' => 'required|string|max:255',
+                'day_of_week' => 'required|in:monday,tuesday,wednesday,thursday,friday,saturday,sunday',
                 'start_time' => 'required|date_format:H:i',
                 'end_time' => 'required|date_format:H:i|after:start_time',
-                'recurrence_type' => 'required|in:weekly,biweekly,monthly'
+                'recurrence_type' => 'required|in:weekly,biweekly,monthly',
+                'timezone' => 'required|timezone',
+                'status' => 'required|in:active,inactive,paused',
+                'effective_start_date' => 'nullable|date|after_or_equal:today',
+                'effective_end_date' => 'nullable|date|after_or_equal:effective_start_date',
+                'max_occurrences' => 'nullable|integer|min:1|max:1000',
+                'auto_publish' => 'boolean',
+                'created_by_id' => 'required|exists:users,id'
             ],
             'relationships' => [
-                ['type' => 'belongsTo', 'related' => 'Assignment']
+                ['type' => 'belongsTo', 'related' => 'Assignment'],
+                ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'created_by_id'],
+                ['type' => 'hasMany', 'related' => 'Shift']
             ],
+            'indexes' => [
+                ['fields' => ['assignment_id', 'status']],
+                ['fields' => ['day_of_week']],
+                ['fields' => ['effective_start_date', 'effective_end_date']],
+                ['fields' => ['last_generated_date']],
+                ['fields' => ['created_by_id']]
+            ],
+            'business_rules' => [
+                'assignment_active' => 'Assignment must be active and within contract dates',
+                'no_overlap' => 'Generated shifts must not overlap with existing shifts for the employee',
+                'within_availability' => 'Generated shifts should respect employee availability patterns',
+                'contract_valid' => 'Assignment contract must be valid during template effective dates',
+                'generation_limit' => 'Stop generation when max_occurrences reached',
+                'timezone_consistency' => 'All times must be handled in specified timezone'
+            ]
         ],
 
         /*

@@ -38,9 +38,8 @@ class ShiftRequest extends Model
         'specific_agency_ids' => 'array',
         'start_date' => 'date',
         'end_date' => 'date',
-        'max_hourly_rate' => 'decimal:2',
         'response_deadline' => 'datetime',
-        'background_check_required' => 'boolean',
+        'max_hourly_rate' => 'decimal:2',
     ];
 
     public function employer()

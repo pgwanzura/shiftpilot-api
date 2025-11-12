@@ -11,6 +11,31 @@ use App\Http\Controllers\Auth\{
 use App\Http\Controllers\{
     UserController,
     AgencyController,
+    AgentController, // New
+    EmployerController, // New
+    ContactController, // New
+    EmployeeController, // New
+    LocationController, // New
+    EmployerAgencyContractController, // New
+    ShiftRequestController, // New
+    AgencyResponseController, // New
+    ShiftController, // New
+    ShiftOfferController, // New
+    ShiftApprovalController, // New
+    TimesheetController, // New
+    EmployeeAvailabilityController, // New
+    TimeOffRequestController, // New
+    InvoiceController, // New
+    PaymentController, // New
+    PaymentLogController, // New
+    PayoutController, // New
+    PayrollController, // New
+    RateCardController, // New
+    SubscriptionController, // New
+    AuditLogController, // New
+    SystemNotificationController, // New
+    WebhookSubscriptionController, // New
+    ProfileController, // New
     AssignmentController,
     CalendarEventsController
 };
@@ -29,8 +54,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::post('email/verification-notification', [EmailVerificationNotificationController::class, 'store'])->name('verification.send');
 
+    // Existing Assignment Routes
     Route::apiResource('assignments', AssignmentController::class);
-
     Route::prefix('assignments')->group(function () {
         Route::patch('{assignment}/status', [AssignmentController::class, 'changeStatus']);
         Route::post('{assignment}/complete', [AssignmentController::class, 'complete']);
@@ -42,9 +67,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('my-assignments', [AssignmentController::class, 'myAssignments']);
     });
 
-
-
-
+    // Calendar Routes (existing)
     Route::prefix('calendar')->group(function () {
         // Main calendar events with enhanced filtering
         Route::get('/events', [CalendarEventsController::class, 'index']);
@@ -84,6 +107,34 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/export', [CalendarEventsController::class, 'exportEvents']);
         Route::get('/schedule-print', [CalendarEventsController::class, 'printSchedule']);
     });
+
+    // New API Resource Routes for all entities as per schema.php
+    Route::apiResource('agencies', AgencyController::class);
+    Route::apiResource('agents', AgentController::class);
+    Route::apiResource('employers', EmployerController::class);
+    Route::apiResource('employees', EmployeeController::class);
+    Route::apiResource('contacts', ContactController::class);
+    Route::apiResource('locations', LocationController::class);
+    Route::apiResource('employer-agency-contracts', EmployerAgencyContractController::class);
+    Route::apiResource('shift-requests', ShiftRequestController::class);
+    Route::apiResource('agency-responses', AgencyResponseController::class);
+    Route::apiResource('shifts', ShiftController::class);
+    Route::apiResource('shift-offers', ShiftOfferController::class);
+    Route::apiResource('shift-approvals', ShiftApprovalController::class);
+    Route::apiResource('timesheets', TimesheetController::class);
+    Route::apiResource('employee-availabilities', EmployeeAvailabilityController::class);
+    Route::apiResource('time-off-requests', TimeOffRequestController::class);
+    Route::apiResource('invoices', InvoiceController::class);
+    Route::apiResource('payments', PaymentController::class);
+    Route::apiResource('payment-logs', PaymentLogController::class);
+    Route::apiResource('payouts', PayoutController::class);
+    Route::apiResource('payrolls', PayrollController::class);
+    Route::apiResource('rate-cards', RateCardController::class);
+    Route::apiResource('subscriptions', SubscriptionController::class);
+    Route::apiResource('audit-logs', AuditLogController::class);
+    Route::apiResource('system-notifications', SystemNotificationController::class);
+    Route::apiResource('webhook-subscriptions', WebhookSubscriptionController::class);
+    Route::apiResource('profiles', ProfileController::class); // New Profiles Resource
 });
 
 Route::get('/healthcheck', function () {

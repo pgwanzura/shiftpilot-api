@@ -39,13 +39,11 @@ class Assignment extends Model
     protected $casts = [
         'start_date' => 'date',
         'end_date' => 'date',
+        'shift_pattern' => 'array',
         'agreed_rate' => 'decimal:2',
         'pay_rate' => 'decimal:2',
         'markup_amount' => 'decimal:2',
         'markup_percent' => 'decimal:2',
-        'shift_pattern' => 'array',
-        'status' => AssignmentStatus::class,
-        'assignment_type' => AssignmentType::class,
     ];
 
     protected $appends = [
@@ -381,5 +379,10 @@ class Assignment extends Model
             'contract_id',
             'employer_id'
         );
+    }
+
+    public function shiftTemplates()
+    {
+        return $this->hasMany(ShiftTemplate::class);
     }
 }

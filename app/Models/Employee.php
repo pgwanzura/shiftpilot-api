@@ -4,6 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Employee extends Model
 {
@@ -14,7 +18,6 @@ class Employee extends Model
     const STATUS_SUSPENDED = 'suspended';
 
     protected $fillable = [
-        'user_id',
         'national_insurance_number',
         'date_of_birth',
         'emergency_contact_name',
@@ -32,17 +35,20 @@ class Employee extends Model
         'meta' => 'array',
     ];
 
-    public function user()
+    /**
+     * Get the employee's profile.
+     */
+    public function profile(): MorphOne
     {
-        return $this->belongsTo(User::class);
+        return $this->morphOne(Profile::class, 'profileable');
     }
 
-    public function agencyEmployees()
+    public function agencyEmployees(): HasMany
     {
         return $this->hasMany(AgencyEmployee::class);
     }
 
-    public function agencies()
+    public function agencies(): BelongsToMany
     {
         return $this->belongsToMany(Agency::class, 'agency_employees')
                     ->using(AgencyEmployee::class)
@@ -50,17 +56,41 @@ class Employee extends Model
                     ->withTimestamps();
     }
 
-    public function timesheets()
+    public function timesheets(): HasMany
     {
         return $this->hasMany(Timesheet::class);
     }
 
-    public function employeeAvailabilities()
+    public function payrolls(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            Payroll::class,
+            AgencyEmployee::class,
+            'employee_id', // Foreign key on agency_employees table
+            'agency_employee_id', // Foreign key on payrolls table
+            'id', // Local key on employees table
+            'id' // Local key on agency_employees table
+        );
+    }
+
+    public function shiftOffers(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            ShiftOffer::class,
+            AgencyEmployee::class,
+            'employee_id', // Foreign key on agency_employees table
+            'agency_employee_id', // Foreign key on shift_offers table
+            'id', // Local key on employees table
+            'id' // Local key on agency_employees table
+        );
+    }
+
+    public function employeeAvailabilities(): HasMany
     {
         return $this->hasMany(EmployeeAvailability::class);
     }
 
-    public function timeOffRequests()
+    public function timeOffRequests(): HasMany
     {
         return $this->hasMany(TimeOffRequest::class);
     }
@@ -72,14 +102,14 @@ class Employee extends Model
 
     public function getAssignments()
     {
-        return Assignment::whereIn('agency_employee_id', 
+        return Assignment::whereIn('agency_employee_id',
             $this->agencyEmployees()->pluck('id')
         )->get();
     }
 
     public function getActiveAssignments()
     {
-        return Assignment::whereIn('agency_employee_id', 
+        return Assignment::whereIn('agency_employee_id',
             $this->agencyEmployees()->pluck('id')
         )->where('status', 'active')->get();
     }
@@ -89,13 +119,13 @@ class Employee extends Model
         $agencyEmployeeIds = $this->agencyEmployees()
             ->where('agency_id', $agencyId)
             ->pluck('id');
-            
+
         return Assignment::whereIn('agency_employee_id', $agencyEmployeeIds)->get();
     }
 
     public function getShifts()
     {
-        return Shift::whereIn('assignment_id', 
+        return Shift::whereIn('assignment_id',
             $this->getAssignments()->pluck('id')
         )->get();
     }
@@ -159,5 +189,21 @@ class Employee extends Model
             ->exists();
 
         return !$hasOverlappingShift;
+    }
+
+    /**
+     * Employee cannot approve assignments directly.
+     */
+    public function canApproveAssignments(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Employee cannot approve timesheets directly.
+     */
+    public function canApproveTimesheets(): bool
+    {
+        return false;
     }
 }

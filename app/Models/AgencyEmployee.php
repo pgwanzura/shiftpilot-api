@@ -49,6 +49,11 @@ class AgencyEmployee extends Model
         return $this->hasMany(Assignment::class);
     }
 
+    public function payrolls()
+    {
+        return $this->hasMany(Payroll::class);
+    }
+
     public function shiftOffers()
     {
         return $this->hasMany(ShiftOffer::class);

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class RateCard extends Model
 {
@@ -12,9 +13,17 @@ class RateCard extends Model
     protected $table = 'rate_cards';
 
     protected $fillable = [
-        'employer_id', 'agency_id', 'role_key', 'location_id',
-        'day_of_week', 'start_time', 'end_time', 'rate',
-        'currency', 'effective_from', 'effective_to'
+        'employer_id',
+        'agency_id',
+        'role_key',
+        'location_id',
+        'day_of_week',
+        'start_time',
+        'end_time',
+        'rate',
+        'currency',
+        'effective_from',
+        'effective_to',
     ];
 
     protected $casts = [
@@ -22,10 +31,10 @@ class RateCard extends Model
         'start_time' => 'datetime',
         'end_time' => 'datetime',
         'effective_from' => 'date',
-        'effective_to' => 'date'
+        'effective_to' => 'date',
     ];
 
-    public function employer()
+    public function employer(): BelongsTo
     {
         return $this->belongsTo(Employer::class);
     }

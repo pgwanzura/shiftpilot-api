@@ -25,8 +25,12 @@ class EventServiceProvider extends ServiceProvider
         \App\Events\Shift\ShiftCancelled::class => [
             \App\Listeners\LogShiftActivity::class,
         ],
-        \App\Events\Shift\ShiftRequested::class => [
-            \App\Listeners\ProcessShiftRequested::class,
+        // Renamed from ShiftRequested to ShiftRequestCreated
+        \App\Events\ShiftRequest\ShiftRequestCreated::class => [
+            \App\Listeners\ProcessShiftRequested::class, // Assuming this listener handles creation
+        ],
+        \App\Events\ShiftRequest\ShiftRequestPublished::class => [
+            // Add a listener for this event, e.g., NotifyAgenciesForShiftRequest::class
         ],
         \App\Events\Shift\ShiftOffered::class => [
             \App\Listeners\ProcessShiftOffered::class,
@@ -52,12 +56,13 @@ class EventServiceProvider extends ServiceProvider
             \App\Listeners\LogTimesheetActivity::class,
             \App\Listeners\ProcessTimesheetSubmitted::class,
         ],
-        \App\Events\Timesheet\TimesheetApproved::class => [
-            \App\Listeners\LogTimesheetActivity::class,
-        ],
-        \App\Events\Timesheet\TimesheetRejected::class => [
-            \App\Listeners\LogTimesheetActivity::class,
-        ],
+        // Generic TimesheetApproved/Rejected are assumed to be replaced by specific ones if schema is primary
+        // \App\Events\Timesheet\TimesheetApproved::class => [
+        //     \App\Listeners\LogTimesheetActivity::class,
+        // ],
+        // \App\Events\Timesheet\TimesheetRejected::class => [
+        //     \App\Listeners\LogTimesheetActivity::class,
+        // ],
         \App\Events\Timesheet\TimesheetAgencyApproved::class => [
             \App\Listeners\ProcessTimesheetAgencyApproved::class,
         ],
@@ -72,24 +77,26 @@ class EventServiceProvider extends ServiceProvider
         \App\Events\InvoicePaid::class => [
             \App\Listeners\ProcessInvoicePaid::class,
         ],
+        \App\Events\Payroll\PayrollGenerated::class => [
+            // Add a listener for this event, e.g., ProcessPayrollRecords::class
+        ],
         \App\Events\PayoutProcessed::class => [
             \App\Listeners\ProcessPayoutProcessed::class,
         ],
 
-        // Payment Events
-        \App\Events\PaymentLogged::class => [
-            // Add payment logging listeners
-        ],
-        \App\Events\PaymentConfirmed::class => [
-            // Add payment confirmation listeners
-        ],
+        // Removed placeholder Payment Events - not defined in schema listeners
+        // \App\Events\PaymentLogged::class => [
+        //     // Add payment logging listeners
+        // ],
+        // \App\Events\PaymentConfirmed::class => [
+        //     // Add payment confirmation listeners
+        // ],
 
-        // Notification Events
-        \App\Events\NotificationSent::class => [
-            // Add notification sent listeners
-        ],
+        // Removed placeholder Notification Events - not defined in schema listeners
+        // \App\Events\NotificationSent::class => [
+        //     // Add notification sent listeners
+        // ],
 
-        // Availability & Time Off Events
         \App\Events\AvailabilityUpdated::class => [
             \App\Listeners\ProcessAvailabilityUpdated::class,
         ],
@@ -98,6 +105,9 @@ class EventServiceProvider extends ServiceProvider
         ],
         \App\Events\TimeOff\TimeOffApproved::class => [
             \App\Listeners\ProcessTimeOffApproved::class,
+        ],
+        \App\Events\TimeOff\TimeOffRejected::class => [
+            // Add a listener for this event, e.g., NotifyEmployeeOfTimeOffRejection::class
         ],
 
         \App\Events\SubscriptionRenewed::class => [
@@ -113,9 +123,10 @@ class EventServiceProvider extends ServiceProvider
         \App\Events\Assignment\AssignmentCompleted::class => [
             \App\Listeners\Assignment\HandleAssignmentCompletion::class,
         ],
-        \App\Events\Assignment\AssignmentExtended::class => [
-            // Add listeners for extension events
-        ],
+        // Removed placeholder AssignmentExtended Event - not defined in schema listeners
+        // \App\Events\Assignment\AssignmentExtended::class => [
+        //     // Add listeners for extension events
+        // ],
         \App\Events\Assignment\AssignmentCancelled::class => [
             \App\Listeners\Assignment\HandleAssignmentCancellation::class,
         ],

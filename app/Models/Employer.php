@@ -4,78 +4,97 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Employer extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'user_id',
         'name',
+        'legal_name',
+        'registration_number',
         'billing_email',
-        'address',
+        'phone',
+        'website',
+        'address_line1',
+        'address_line2',
         'city',
+        'county',
+        'postcode',
         'country',
-        'subscription_status',
+        'industry',
+        'company_size',
+        'status',
         'meta',
     ];
 
     protected $casts = [
         'meta' => 'array',
+        'status' => 'string',
     ];
 
-    public function user()
+    /**
+     * Get the employer's profile.
+     */
+    public function profile(): MorphOne
     {
-        return $this->belongsTo(User::class);
+        return $this->morphOne(Profile::class, 'profileable');
     }
 
-    public function contacts()
+    public function contacts(): HasMany
     {
         return $this->hasMany(Contact::class);
     }
 
-    public function locations()
+    public function locations(): HasMany
     {
         return $this->hasMany(Location::class);
     }
 
-    public function shifts()
+    public function employerAgencyContracts(): HasMany
     {
-        return $this->hasMany(Shift::class);
+        return $this->hasMany(EmployerAgencyContract::class);
     }
 
-    public function employerAgencyLinks()
+    public function assignments(): HasMany
     {
-        return $this->hasMany(EmployerAgencyLink::class);
+        return $this->hasMany(Assignment::class);
     }
 
-    public function invoices()
-    {
-        return $this->hasMany(Invoice::class);
-    }
-
-    public function employees()
-    {
-        return $this->hasMany(Employee::class);
-    }
-
-    public function placements()
-    {
-        return $this->hasMany(Placement::class);
-    }
-
-    public function rateCards()
+    public function rateCards(): HasMany
     {
         return $this->hasMany(RateCard::class);
     }
 
-    public function shiftTemplates()
-    {
-        return $this->hasMany(ShiftTemplate::class);
-    }
-
-    public function subscriptions()
+    public function subscriptions(): MorphMany
     {
         return $this->morphMany(Subscription::class, 'subscriber');
+    }
+
+    /**
+     * Get employer ID for employer.
+     */
+    public function getEmployerId(): ?int
+    {
+        return $this->id;
+    }
+
+    /**
+     * Employer can approve assignments.
+     */
+    public function canApproveAssignments(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Employer can approve timesheets.
+     */
+    public function canApproveTimesheets(): bool
+    {
+        return true;
     }
 }

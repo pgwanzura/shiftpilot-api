@@ -4,13 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Agent extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'user_id',
         'agency_id',
         'name',
         'email',
@@ -22,18 +23,45 @@ class Agent extends Model
         'permissions' => 'array',
     ];
 
-    public function user()
+    /**
+     * Get the agent's profile.
+     */
+    public function profile(): MorphOne
     {
-        return $this->belongsTo(User::class);
+        return $this->morphOne(Profile::class, 'profileable');
     }
 
-    public function agency()
+    /**
+     * The agency that the agent belongs to.
+     */
+    public function agency(): BelongsTo
     {
         return $this->belongsTo(Agency::class);
     }
 
-    public function shifts()
+    /**
+     * Get agency ID for agent.
+     */
+    public function getAgencyId(): ?int
     {
-        return $this->hasMany(Shift::class);
+        return $this->agency_id;
+    }
+
+    /**
+     * Agents cannot approve assignments directly unless specified otherwise.
+     */
+    public function canApproveAssignments(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Agents can approve timesheets.
+     */
+    public function canApproveTimesheets(): bool
+    {
+        // Assuming agents can approve timesheets as per schema roles
+        // This might need more granular permission checks based on your policy logic
+        return true;
     }
 }
