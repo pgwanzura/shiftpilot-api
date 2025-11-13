@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use App\Enums\AgencyStatus;
+use App\Enums\SubscriptionStatus;
+use App\Events\Agency\AgencyStatusChanged;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\MorphMany;
-use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Agency extends Model
 {
@@ -18,9 +20,15 @@ class Agency extends Model
         'legal_name',
         'registration_number',
         'billing_email',
-        'address',
+        'phone',
+        'address_line1',
+        'address_line2',
         'city',
         'country',
+        'country',
+        'longitude',
+        'latitude',
+        'postcode',
         'default_markup_percent',
         'subscription_status',
         'meta',
@@ -28,15 +36,15 @@ class Agency extends Model
 
     protected $casts = [
         'default_markup_percent' => 'decimal:2',
+        'subscription_status' => SubscriptionStatus::class,
         'meta' => 'array',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
-    /**
-     * Get the agency's profile.
-     */
-    public function profile(): MorphOne
+    public function user(): BelongsTo
     {
-        return $this->morphOne(Profile::class, 'profileable');
+        return $this->belongsTo(User::class);
     }
 
     public function agents(): HasMany
@@ -64,19 +72,9 @@ class Agency extends Model
         return $this->hasMany(Payroll::class);
     }
 
-    public function payouts(): HasMany
+    public function AgencyBranches(): HasMany
     {
-        return $this->hasMany(Payout::class);
-    }
-
-    public function rateCards(): HasMany
-    {
-        return $this->hasMany(RateCard::class);
-    }
-
-    public function subscriptions(): MorphMany
-    {
-        return $this->morphMany(Subscription::class, 'subscriber');
+        return $this->hasMany(AgencyBranch::class);
     }
 
     public function agencyResponses(): HasMany
@@ -89,28 +87,76 @@ class Agency extends Model
         return $this->hasMany(TimeOffRequest::class);
     }
 
-    /**
-     * Get agency ID for agency.
-     */
-    public function getAgencyId(): ?int
+    public function shiftRequests(): HasMany
     {
-        return $this->id;
+        return $this->hasMany(ShiftRequest::class);
     }
 
-    /**
-     * Agency cannot approve assignments directly.
-     */
-    public function canApproveAssignments(): bool
+    public function assignments(): HasMany
     {
-        return false;
+        return $this->hasMany(Assignment::class);
     }
 
-    /**
-     * Agency can approve timesheets.
-     */
-    public function canApproveTimesheets(): bool
+    public function subscription(): HasOne
     {
-        // Assuming agency can approve timesheets as per schema roles
-        return true;
+        return $this->hasOne(Subscription::class, 'entity_id')
+            ->where('entity_type', self::class);
+    }
+
+    public function headOffice(): HasOne
+    {
+        return $this->hasOne(AgencyBranch::class)->where('is_head_office', true);
+    }
+
+    public function isActive(): bool
+    {
+        return $this->subscription_status === SubscriptionStatus::ACTIVE;
+    }
+
+    public function hasActiveContractWith(Employer $employer): bool
+    {
+        return $this->employerAgencyContracts()
+            ->where('employer_id', $employer->id)
+            ->where('status', 'active')
+            ->exists();
+    }
+
+    public function getActiveEmployeesCount(): int
+    {
+        return $this->agencyEmployees()
+            ->where('status', 'active')
+            ->count();
+    }
+
+    public function getActiveAssignmentsCount(): int
+    {
+        return $this->assignments()
+            ->where('status', 'active')
+            ->count();
+    }
+
+    public function calculateMarkupAmount(float $baseAmount): float
+    {
+        return $baseAmount * ($this->default_markup_percent / 100);
+    }
+
+    public function getMarkedUpAmount(float $baseAmount): float
+    {
+        return $baseAmount + $this->calculateMarkupAmount($baseAmount);
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (Agency $agency) {
+            if (empty($agency->subscription_status)) {
+                $agency->subscription_status = SubscriptionStatus::ACTIVE;
+            }
+        });
+
+        static::updated(function (Agency $agency) {
+            if ($agency->isDirty('subscription_status')) {
+                AgencyStatusChanged::dispatch($agency, $agency->getOriginal('subscription_status'));
+            }
+        });
     }
 }

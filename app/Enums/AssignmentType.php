@@ -4,18 +4,22 @@ namespace App\Enums;
 
 enum AssignmentType: string
 {
-    case ONGOING = 'ongoing';
-    case TEMPORARY = 'temporary';
-    case PROJECT_BASED = 'project_based';
-    case SEASONAL = 'seasonal';
+    case DIRECT = 'direct';
+    case STANDARD = 'standard';
 
     public function label(): string
     {
-        return match($this) {
-            self::ONGOING => 'Ongoing',
-            self::TEMPORARY => 'Temporary',
-            self::PROJECT_BASED => 'Project Based',
-            self::SEASONAL => 'Seasonal',
+        return match ($this) {
+            self::DIRECT => 'Direct Assignment',
+            self::STANDARD => 'Standard Assignment',
+        };
+    }
+
+    public function description(): string
+    {
+        return match ($this) {
+            self::DIRECT => 'Employer directly assigns employee without agency bidding',
+            self::STANDARD => 'Assignment created through shift request and agency response process',
         };
     }
 

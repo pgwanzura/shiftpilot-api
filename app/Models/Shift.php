@@ -18,7 +18,6 @@ class Shift extends Model
 
     protected $fillable = [
         'assignment_id',
-        'location_id',
         'shift_date',
         'start_time',
         'end_time',

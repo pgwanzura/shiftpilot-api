@@ -17,9 +17,7 @@ class AuditLogController extends Controller
         $this->auditLogService = $auditLogService;
     }
 
-    /**
-     * Display a listing of the resource.
-     */
+
     public function index(GetAuditLogsRequest $request): JsonResponse
     {
         $auditLogs = $this->auditLogService->getAuditLogs($request->validated(), $request->get('per_page', 15));
@@ -37,9 +35,7 @@ class AuditLogController extends Controller
         ]);
     }
 
-    /**
-     * Display the specified resource.
-     */
+
     public function show(string $id): JsonResponse
     {
         $auditLog = $this->auditLogService->getAuditLogById($id);
@@ -58,7 +54,6 @@ class AuditLogController extends Controller
         ]);
     }
 
-    // Store, Update, and Destroy methods are not applicable for Audit Logs.
     public function store(Request $request): JsonResponse
     {
         return response()->json(['message' => 'Audit logs cannot be created via API.'], 405);

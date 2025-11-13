@@ -4,20 +4,19 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Employee extends Model
 {
     use HasFactory;
 
-    const STATUS_ACTIVE = 'active';
-    const STATUS_INACTIVE = 'inactive';
-    const STATUS_SUSPENDED = 'suspended';
-
     protected $fillable = [
+        'user_id',
         'national_insurance_number',
         'date_of_birth',
         'emergency_contact_name',
@@ -35,12 +34,25 @@ class Employee extends Model
         'meta' => 'array',
     ];
 
-    /**
-     * Get the employee's profile.
-     */
+    protected $appends = [
+        'age',
+        'is_active',
+        'has_active_agencies',
+    ];
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function profile(): MorphOne
     {
         return $this->morphOne(Profile::class, 'profileable');
+    }
+
+    public function preferences(): HasOne
+    {
+        return $this->hasOne(EmployeePreferences::class);
     }
 
     public function agencyEmployees(): HasMany
@@ -51,14 +63,43 @@ class Employee extends Model
     public function agencies(): BelongsToMany
     {
         return $this->belongsToMany(Agency::class, 'agency_employees')
-                    ->using(AgencyEmployee::class)
-                    ->withPivot('position', 'pay_rate', 'employment_type', 'status', 'contract_start_date', 'contract_end_date')
-                    ->withTimestamps();
+            ->using(AgencyEmployee::class)
+            ->withPivot('position', 'pay_rate', 'employment_type', 'status', 'contract_start_date', 'contract_end_date')
+            ->withTimestamps();
     }
 
-    public function timesheets(): HasMany
+    public function assignments(): HasManyThrough
     {
-        return $this->hasMany(Timesheet::class);
+        return $this->hasManyThrough(
+            Assignment::class,
+            AgencyEmployee::class,
+            'employee_id',
+            'agency_employee_id'
+        );
+    }
+
+    public function shifts(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            Shift::class,
+            Assignment::class,
+            'agency_employee_id',
+            'assignment_id',
+            'id',
+            'id'
+        );
+    }
+
+    public function timesheets(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            Timesheet::class,
+            Shift::class,
+            'assignment_id',
+            'shift_id',
+            'id',
+            'id'
+        );
     }
 
     public function payrolls(): HasManyThrough
@@ -66,10 +107,8 @@ class Employee extends Model
         return $this->hasManyThrough(
             Payroll::class,
             AgencyEmployee::class,
-            'employee_id', // Foreign key on agency_employees table
-            'agency_employee_id', // Foreign key on payrolls table
-            'id', // Local key on employees table
-            'id' // Local key on agency_employees table
+            'employee_id',
+            'agency_employee_id'
         );
     }
 
@@ -78,10 +117,8 @@ class Employee extends Model
         return $this->hasManyThrough(
             ShiftOffer::class,
             AgencyEmployee::class,
-            'employee_id', // Foreign key on agency_employees table
-            'agency_employee_id', // Foreign key on shift_offers table
-            'id', // Local key on employees table
-            'id' // Local key on agency_employees table
+            'employee_id',
+            'agency_employee_id'
         );
     }
 
@@ -97,45 +134,97 @@ class Employee extends Model
 
     public function scopeActive($query)
     {
-        return $query->where('status', self::STATUS_ACTIVE);
+        return $query->where('status', 'active');
     }
 
-    public function getAssignments()
+    public function scopeInactive($query)
     {
-        return Assignment::whereIn('agency_employee_id',
-            $this->agencyEmployees()->pluck('id')
-        )->get();
+        return $query->where('status', 'inactive');
     }
 
-    public function getActiveAssignments()
+    public function scopeSuspended($query)
     {
-        return Assignment::whereIn('agency_employee_id',
-            $this->agencyEmployees()->pluck('id')
-        )->where('status', 'active')->get();
+        return $query->where('status', 'suspended');
     }
 
-    public function assignmentsForAgency($agencyId)
+    public function scopeWithActiveAgencies($query)
     {
-        $agencyEmployeeIds = $this->agencyEmployees()
-            ->where('agency_id', $agencyId)
-            ->pluck('id');
-
-        return Assignment::whereIn('agency_employee_id', $agencyEmployeeIds)->get();
+        return $query->whereHas('agencyEmployees', function ($q) {
+            $q->where('status', 'active');
+        });
     }
 
-    public function getShifts()
+    public function scopeWithQualifications($query, array $qualifications)
     {
-        return Shift::whereIn('assignment_id',
-            $this->getAssignments()->pluck('id')
-        )->get();
+        return $query->whereJsonContains('qualifications', $qualifications);
     }
 
-    public function isRegisteredWithAgency($agencyId)
+    public function scopeAvailableForShift($query, $startTime, $endTime)
+    {
+        return $query->whereDoesntHave('timeOffRequests', function ($q) use ($startTime, $endTime) {
+            $q->where('status', 'approved')
+                ->where(function ($subQ) use ($startTime, $endTime) {
+                    $subQ->whereBetween('start_date', [$startTime, $endTime])
+                        ->orWhereBetween('end_date', [$startTime, $endTime])
+                        ->orWhere(function ($innerQ) use ($startTime, $endTime) {
+                            $innerQ->where('start_date', '<=', $startTime)
+                                ->where('end_date', '>=', $endTime);
+                        });
+                });
+        })->whereDoesntHave('shifts', function ($q) use ($startTime, $endTime) {
+            $q->whereNotIn('status', ['cancelled', 'no_show'])
+                ->where(function ($subQ) use ($startTime, $endTime) {
+                    $subQ->whereBetween('start_time', [$startTime, $endTime])
+                        ->orWhereBetween('end_time', [$startTime, $endTime])
+                        ->orWhere(function ($innerQ) use ($startTime, $endTime) {
+                            $innerQ->where('start_time', '<=', $startTime)
+                                ->where('end_time', '>=', $endTime);
+                        });
+                });
+        });
+    }
+
+    public function getAgeAttribute(): ?int
+    {
+        return $this->date_of_birth?->age;
+    }
+
+    public function getIsActiveAttribute(): bool
+    {
+        return $this->status === 'active';
+    }
+
+    public function getHasActiveAgenciesAttribute(): bool
+    {
+        return $this->agencyEmployees()->where('status', 'active')->exists();
+    }
+
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
+    }
+
+    public function isSuspended(): bool
+    {
+        return $this->status === 'suspended';
+    }
+
+    public function isInactive(): bool
+    {
+        return $this->status === 'inactive';
+    }
+
+    public function canWork(): bool
+    {
+        return $this->isActive() && $this->has_active_agencies;
+    }
+
+    public function isRegisteredWithAgency($agencyId): bool
     {
         return $this->agencyEmployees()
-                    ->where('agency_id', $agencyId)
-                    ->where('status', 'active')
-                    ->exists();
+            ->where('agency_id', $agencyId)
+            ->where('status', 'active')
+            ->exists();
     }
 
     public function getActiveAgencies()
@@ -143,7 +232,7 @@ class Employee extends Model
         return $this->agencies()->wherePivot('status', 'active')->get();
     }
 
-    public function hasRequiredQualifications($requiredQualifications)
+    public function hasRequiredQualifications(array $requiredQualifications): bool
     {
         if (empty($requiredQualifications)) {
             return true;
@@ -153,22 +242,31 @@ class Employee extends Model
         return !empty(array_intersect($requiredQualifications, $employeeQualifications));
     }
 
-    public function getAgeAttribute()
+    public function hasRequiredCertifications(array $requiredCertifications): bool
     {
-        return $this->date_of_birth?->age;
+        if (empty($requiredCertifications)) {
+            return true;
+        }
+
+        $employeeCertifications = $this->certifications ?? [];
+        return !empty(array_intersect($requiredCertifications, $employeeCertifications));
     }
 
-    public function isAvailableForShift($shiftStart, $shiftEnd)
+    public function isAvailableForShift($shiftStart, $shiftEnd): bool
     {
+        if (!$this->canWork()) {
+            return false;
+        }
+
         $hasTimeOff = $this->timeOffRequests()
             ->where('status', 'approved')
             ->where(function ($query) use ($shiftStart, $shiftEnd) {
                 $query->whereBetween('start_date', [$shiftStart, $shiftEnd])
-                      ->orWhereBetween('end_date', [$shiftStart, $shiftEnd])
-                      ->orWhere(function ($q) use ($shiftStart, $shiftEnd) {
-                          $q->where('start_date', '<=', $shiftStart)
+                    ->orWhereBetween('end_date', [$shiftStart, $shiftEnd])
+                    ->orWhere(function ($q) use ($shiftStart, $shiftEnd) {
+                        $q->where('start_date', '<=', $shiftStart)
                             ->where('end_date', '>=', $shiftEnd);
-                      });
+                    });
             })
             ->exists();
 
@@ -176,34 +274,105 @@ class Employee extends Model
             return false;
         }
 
-        $hasOverlappingShift = $this->getShifts()
+        $hasOverlappingShift = $this->shifts()
+            ->whereNotIn('status', ['cancelled', 'no_show'])
             ->where(function ($query) use ($shiftStart, $shiftEnd) {
                 $query->whereBetween('start_time', [$shiftStart, $shiftEnd])
-                      ->orWhereBetween('end_time', [$shiftStart, $shiftEnd])
-                      ->orWhere(function ($q) use ($shiftStart, $shiftEnd) {
-                          $q->where('start_time', '<=', $shiftStart)
+                    ->orWhereBetween('end_time', [$shiftStart, $shiftEnd])
+                    ->orWhere(function ($q) use ($shiftStart, $shiftEnd) {
+                        $q->where('start_time', '<=', $shiftStart)
                             ->where('end_time', '>=', $shiftEnd);
-                      });
+                    });
             })
-            ->whereNotIn('status', ['cancelled', 'no_show'])
             ->exists();
 
         return !$hasOverlappingShift;
     }
 
-    /**
-     * Employee cannot approve assignments directly.
-     */
-    public function canApproveAssignments(): bool
+    public function meetsPreferences($shiftData): bool
     {
-        return false;
+        if (!$this->preferences) {
+            return true;
+        }
+
+        $preferences = $this->preferences;
+
+        if ($preferences->min_hourly_rate && $shiftData['hourly_rate'] < $preferences->min_hourly_rate) {
+            return false;
+        }
+
+        if ($preferences->preferred_locations && !in_array($shiftData['location_id'], $preferences->preferred_locations)) {
+            return false;
+        }
+
+        if ($preferences->preferred_roles && !in_array($shiftData['role'], $preferences->preferred_roles)) {
+            return false;
+        }
+
+        return true;
     }
 
-    /**
-     * Employee cannot approve timesheets directly.
-     */
-    public function canApproveTimesheets(): bool
+    public function getCurrentAssignments()
     {
-        return false;
+        return $this->assignments()
+            ->whereIn('status', ['active', 'pending'])
+            ->get();
+    }
+
+    public function getUpcomingShifts()
+    {
+        return $this->shifts()
+            ->where('start_time', '>=', now())
+            ->whereIn('status', ['scheduled', 'pending_approval', 'approved'])
+            ->orderBy('start_time')
+            ->get();
+    }
+
+    public function getTotalHoursWorked($startDate = null, $endDate = null)
+    {
+        $query = $this->timesheets()
+            ->where('status', 'employer_approved');
+
+        if ($startDate) {
+            $query->where('created_at', '>=', $startDate);
+        }
+
+        if ($endDate) {
+            $query->where('created_at', '<=', $endDate);
+        }
+
+        return $query->sum('hours_worked');
+    }
+
+    public function canBeAssigned(): bool
+    {
+        return $this->isActive() && $this->has_active_agencies;
+    }
+
+    public function suspend(): bool
+    {
+        if ($this->isSuspended()) {
+            return false;
+        }
+
+        return $this->update(['status' => 'suspended']);
+    }
+
+    public function activate(): bool
+    {
+        if ($this->isActive()) {
+            return false;
+        }
+
+        return $this->update(['status' => 'active']);
+    }
+
+    public function deactivate(): bool
+    {
+        if ($this->isInactive()) {
+            return false;
+        }
+
+        return $this->update(['status' => 'inactive']);
     }
 }

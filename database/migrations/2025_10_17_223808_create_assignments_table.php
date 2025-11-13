@@ -24,7 +24,7 @@ return new class extends Migration
             $table->decimal('markup_amount', 10, 2);
             $table->decimal('markup_percent', 5, 2);
             $table->string('status')->default('active');
-            $table->string('assignment_type')->default('ongoing');
+            $table->string('assignment_type')->default('direct');
             $table->json('shift_pattern')->nullable();
             $table->text('notes')->nullable();
             $table->foreignId('created_by_id')->constrained('users');
@@ -33,6 +33,7 @@ return new class extends Migration
             $table->index(['agency_employee_id', 'start_date', 'end_date']);
             $table->index(['contract_id', 'status']);
             $table->index(['agency_employee_id', 'status']);
+            $table->index(['assignment_type', 'status']);
         });
     }
 

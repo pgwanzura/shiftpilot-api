@@ -42,15 +42,6 @@ return [
                 'password' => ['type' => 'string', 'nullable' => false],
                 'role' => ['type' => 'string', 'nullable' => false, 'default' => 'employee'],
                 'phone' => ['type' => 'string', 'nullable' => true],
-                'address_line1' => ['type' => 'string', 'nullable' => true],
-                'address_line2' => ['type' => 'string', 'nullable' => true],
-                'city' => ['type' => 'string', 'nullable' => true],
-                'county' => ['type' => 'string', 'nullable' => true],
-                'postcode' => ['type' => 'string', 'nullable' => true],
-                'country' => ['type' => 'string', 'nullable' => true, 'default' => 'GB'],
-                'latitude' => ['type' => 'decimal', 'precision' => 10, 'scale' => 8, 'nullable' => true],
-                'longitude' => ['type' => 'decimal', 'precision' => 11, 'scale' => 8, 'nullable' => true],
-
                 'status' => ['type' => 'string', 'nullable' => false, 'default' => 'active'],
                 'meta' => ['type' => 'json', 'nullable' => true],
                 'email_verified_at' => ['type' => 'timestamp', 'nullable' => true],
@@ -97,14 +88,19 @@ return [
             'table' => 'agencies',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'user_id' => ['type' => 'foreign', 'references' => 'users,id', 'nullable' => false],
                 'name' => ['type' => 'string'],
                 'legal_name' => ['type' => 'string', 'nullable' => true],
                 'registration_number' => ['type' => 'string', 'nullable' => true],
                 'billing_email' => ['type' => 'string', 'nullable' => true],
-                'address' => ['type' => 'string', 'nullable' => true],
+                'phone' => ['type' => 'string', 'nullable' => true],
+                'address_line1' => ['type' => 'string', 'nullable' => true],
+                'address_line2' => ['type' => 'string', 'nullable' => true],
                 'city' => ['type' => 'string', 'nullable' => true],
-                'country' => ['type' => 'string', 'nullable' => true],
+                'county' => ['type' => 'string', 'nullable' => true],
+                'postcode' => ['type' => 'string', 'nullable' => true],
+                'country' => ['type' => 'string', 'nullable' => true, 'default' => 'GB'],
+                'latitude' => ['type' => 'decimal', 'precision' => 10, 'scale' => 8, 'nullable' => true],
+                'longitude' => ['type' => 'decimal', 'precision' => 11, 'scale' => 8, 'nullable' => true],
                 'default_markup_percent' => ['type' => 'decimal', 'precision' => 5, 'scale' => 2, 'default' => 15.00],
                 'subscription_status' => ['type' => 'string', 'default' => 'active'],
                 'meta' => ['type' => 'json', 'nullable' => true],
@@ -122,8 +118,86 @@ return [
                 ['type' => 'hasMany', 'related' => 'AgencyEmployee'],
                 ['type' => 'hasMany', 'related' => 'EmployerAgencyContract'],
                 ['type' => 'hasMany', 'related' => 'Invoice'],
-                ['type' => 'hasMany', 'related' => 'Payroll']
+                ['type' => 'hasMany', 'related' => 'Payroll'],
+                ['type' => 'hasMany', 'related' => 'Branch'],
             ],
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
+        | Branch (Agency Location/Branch)
+        | Agencies can have multiple branches for different locations
+        |--------------------------------------------------------------------------
+        */
+        'agency_branch' => [
+            'table' => 'branches',
+            'fields' => [
+                'id' => ['type' => 'increments'],
+                'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
+                'name' => ['type' => 'string'],
+                'branch_code' => ['type' => 'string', 'nullable' => true],
+                'email' => ['type' => 'string', 'nullable' => true],
+                'phone' => ['type' => 'string', 'nullable' => true],
+                'address_line1' => ['type' => 'string', 'nullable' => true],
+                'address_line2' => ['type' => 'string', 'nullable' => true],
+                'city' => ['type' => 'string', 'nullable' => true],
+                'county' => ['type' => 'string', 'nullable' => true],
+                'postcode' => ['type' => 'string', 'nullable' => true],
+                'country' => ['type' => 'string', 'nullable' => true, 'default' => 'GB'],
+                'latitude' => ['type' => 'decimal', 'precision' => 10, 'scale' => 8, 'nullable' => true],
+                'longitude' => ['type' => 'decimal', 'precision' => 11, 'scale' => 8, 'nullable' => true],
+                'contact_name' => ['type' => 'string', 'nullable' => true],
+                'contact_email' => ['type' => 'string', 'nullable' => true],
+                'contact_phone' => ['type' => 'string', 'nullable' => true],
+                'status' => ['type' => 'string', 'default' => 'active'],
+                'opening_hours' => ['type' => 'json', 'nullable' => true],
+                'services_offered' => ['type' => 'json', 'nullable' => true],
+                'meta' => ['type' => 'json', 'nullable' => true],
+                'created_at' => ['type' => 'timestamp'],
+                'updated_at' => ['type' => 'timestamp']
+            ],
+            'validation' => [
+                'agency_id' => 'required|exists:agencies,id',
+                'name' => 'required|string|max:255',
+                'branch_code' => 'nullable|string|max:50|unique:branches,branch_code',
+                'email' => 'nullable|email|max:255',
+                'phone' => 'nullable|string|max:20',
+                'address_line1' => 'nullable|string|max:255',
+                'address_line2' => 'nullable|string|max:255',
+                'city' => 'nullable|string|max:100',
+                'county' => 'nullable|string|max:100',
+                'postcode' => 'nullable|string|max:20',
+                'country' => 'nullable|string|size:2',
+                'latitude' => 'nullable|numeric|between:-90,90',
+                'longitude' => 'nullable|numeric|between:-180,180',
+                'contact_email' => 'nullable|email|max:255',
+                'contact_phone' => 'nullable|string|max:20',
+                'status' => 'required|in:active,inactive,suspended',
+                'opening_hours' => 'nullable|array',
+                'services_offered' => 'nullable|array',
+            ],
+            'relationships' => [
+                ['type' => 'belongsTo', 'related' => 'Agency'],
+                ['type' => 'hasMany', 'related' => 'Agent'],
+                ['type' => 'hasMany', 'related' => 'AgencyEmployee'],
+                ['type' => 'hasMany', 'related' => 'Assignment'],
+                ['type' => 'hasMany', 'related' => 'Payroll'],
+            ],
+            'indexes' => [
+                ['fields' => ['agency_id', 'name']],
+                ['fields' => ['agency_id', 'is_head_office']],
+                ['fields' => ['branch_code'], 'unique' => true],
+                ['fields' => ['postcode']],
+                ['fields' => ['city']],
+                ['fields' => ['country']],
+                ['fields' => ['latitude', 'longitude']],
+                ['fields' => ['status']],
+            ],
+            'business_rules' => [
+                'single_head_office' => 'Each agency can have only one head office branch',
+                'branch_code_uniqueness' => 'Branch codes must be unique across all agencies',
+                'geocoding_validation' => 'Latitude/longitude should be automatically geocoded from address when possible',
+            ]
         ],
 
         /*
@@ -137,9 +211,7 @@ return [
                 'id' => ['type' => 'increments'],
                 'user_id' => ['type' => 'foreign', 'references' => 'users,id'],
                 'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
-                'name' => ['type' => 'string'],
-                'email' => ['type' => 'string'],
-                'phone' => ['type' => 'string', 'nullable' => true],
+                'branch_id' => ['type' => 'foreign', 'references' => 'branches,id', 'nullable' => true],
                 'permissions' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
@@ -147,10 +219,12 @@ return [
             'validation' => [
                 'user_id' => 'required|exists:users,id',
                 'agency_id' => 'required|exists:agencies,id',
+                'branch_id' => 'nullable|exists:branches,id',
             ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'Agency'],
-                ['type' => 'belongsTo', 'related' => 'User']
+                ['type' => 'belongsTo', 'related' => 'User'],
+                ['type' => 'belongsTo', 'related' => 'Branch'],
             ],
         ],
 
@@ -244,9 +318,6 @@ return [
                 'id' => ['type' => 'increments'],
                 'employer_id' => ['type' => 'foreign', 'references' => 'employers,id'],
                 'user_id' => ['type' => 'foreign', 'references' => 'users,id', 'nullable' => true],
-                'name' => ['type' => 'string'],
-                'email' => ['type' => 'string'],
-                'phone' => ['type' => 'string', 'nullable' => true],
                 'role' => ['type' => 'string', 'default' => 'manager'],
                 'can_approve_timesheets' => ['type' => 'boolean', 'default' => true],
                 'can_approve_assignments' => ['type' => 'boolean', 'default' => true],
@@ -337,6 +408,14 @@ return [
                 'user_id' => ['type' => 'foreign', 'references' => 'users,id'],
                 'national_insurance_number' => ['type' => 'string', 'nullable' => true],
                 'date_of_birth' => ['type' => 'date', 'nullable' => true],
+                'address_line1' => ['type' => 'string', 'nullable' => true],
+                'address_line2' => ['type' => 'string', 'nullable' => true],
+                'city' => ['type' => 'string', 'nullable' => true],
+                'county' => ['type' => 'string', 'nullable' => true],
+                'postcode' => ['type' => 'string', 'nullable' => true],
+                'country' => ['type' => 'string', 'nullable' => true, 'default' => 'GB'],
+                'latitude' => ['type' => 'decimal', 'precision' => 10, 'scale' => 8, 'nullable' => true],
+                'longitude' => ['type' => 'decimal', 'precision' => 11, 'scale' => 8, 'nullable' => true],
                 'emergency_contact_name' => ['type' => 'string', 'nullable' => true],
                 'emergency_contact_phone' => ['type' => 'string', 'nullable' => true],
                 'qualifications' => ['type' => 'json', 'nullable' => true],
@@ -348,7 +427,15 @@ return [
             ],
             'validation' => [
                 'user_id' => 'required|exists:users,id',
-                'status' => 'required|in:active,inactive,suspended'
+                'status' => 'required|in:active,inactive,suspended',
+                'address_line1' => 'nullable|string|max:255',
+                'address_line2' => 'nullable|string|max:255',
+                'city' => 'nullable|string|max:100',
+                'county' => 'nullable|string|max:100',
+                'postcode' => 'nullable|string|max:20',
+                'country' => 'nullable|string|size:2',
+                'latitude' => 'nullable|numeric|between:-90,90',
+                'longitude' => 'nullable|numeric|between:-180,180',
             ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'User'],
@@ -359,6 +446,46 @@ return [
                 ['type' => 'hasMany', 'related' => 'Shift'],
                 ['type' => 'hasMany', 'related' => 'Timesheet']
             ],
+        ],
+
+        'employee_preferences' => [
+            'table' => 'employee_preferences',
+            'fields' => [
+                'id' => ['type' => 'increments'],
+                'employee_id' => ['type' => 'foreign', 'references' => 'employees,id'],
+                'preferred_shift_types' => ['type' => 'json', 'nullable' => true],
+                'preferred_locations' => ['type' => 'json', 'nullable' => true],
+                'preferred_industries' => ['type' => 'json', 'nullable' => true],
+                'preferred_roles' => ['type' => 'json', 'nullable' => true],
+                'max_travel_distance_km' => ['type' => 'integer', 'nullable' => true],
+                'min_hourly_rate' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2, 'nullable' => true],
+                'preferred_shift_lengths' => ['type' => 'json', 'nullable' => true],
+                'preferred_days' => ['type' => 'json', 'nullable' => true],
+                'preferred_start_times' => ['type' => 'json', 'nullable' => true],
+                'preferred_employment_types' => ['type' => 'json', 'nullable' => true],
+                'notification_preferences' => ['type' => 'json', 'nullable' => true],
+                'communication_preferences' => ['type' => 'json', 'nullable' => true],
+                'auto_accept_offers' => ['type' => 'boolean', 'default' => false],
+                'max_shifts_per_week' => ['type' => 'integer', 'nullable' => true],
+                'created_at' => ['type' => 'timestamp'],
+                'updated_at' => ['type' => 'timestamp']
+            ],
+            'validation' => [
+                'employee_id' => 'required|exists:employees,id',
+                'max_travel_distance_km' => 'nullable|integer|min:1|max:500',
+                'min_hourly_rate' => 'nullable|numeric|min:0',
+                'max_shifts_per_week' => 'nullable|integer|min:1|max:7'
+            ],
+            'relationships' => [
+                ['type' => 'belongsTo', 'related' => 'Employee']
+            ],
+            'indexes' => [
+                ['fields' => ['employee_id'], 'unique' => true]
+            ],
+            'business_rules' => [
+                'single_preferences_per_employee' => 'Each employee can have only one preferences record',
+                'preference_validation' => 'Preferences must be valid JSON structures'
+            ]
         ],
 
         /*
@@ -373,6 +500,7 @@ return [
             'fields' => [
                 'id' => ['type' => 'increments'],
                 'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
+                'branch_id' => ['type' => 'foreign', 'references' => 'branches,id', 'nullable' => true],
                 'employee_id' => ['type' => 'foreign', 'references' => 'employees,id'],
                 'position' => ['type' => 'string', 'nullable' => true],
                 'pay_rate' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2],
@@ -398,12 +526,14 @@ return [
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'Agency'],
                 ['type' => 'belongsTo', 'related' => 'Employee'],
-                ['type' => 'hasMany', 'related' => 'Assignment']
+                ['type' => 'hasMany', 'related' => 'Assignment'],
+                ['type' => 'belongsTo', 'related' => 'Branch'],
             ],
             'indexes' => [
                 ['fields' => ['agency_id', 'employee_id'], 'unique' => true],
                 ['fields' => ['employee_id', 'status']],
-                ['fields' => ['agency_id', 'status']]
+                ['fields' => ['agency_id', 'status']],
+                ['fields' => ['branch_id', 'status']],
             ],
             'business_rules' => [
                 'unique_active_registration' => 'Only one active registration per agency-employee pair',
@@ -605,24 +735,16 @@ return [
                 'id' => ['type' => 'increments'],
                 'contract_id' => ['type' => 'foreign', 'references' => 'employer_agency_contracts,id'],
                 'agency_employee_id' => ['type' => 'foreign', 'references' => 'agency_employees,id'],
-
-                // CHANGED FROM NULLABLE TO REQUIRED:
-                'shift_request_id' => ['type' => 'foreign', 'references' => 'shift_requests,id', 'nullable' => false],
-                'agency_response_id' => ['type' => 'foreign', 'references' => 'agency_responses,id', 'nullable' => false],
+                'shift_request_id' => ['type' => 'foreign', 'references' => 'shift_requests,id', 'nullable' => true],
+                'agency_response_id' => ['type' => 'foreign', 'references' => 'agency_responses,id', 'nullable' => true],
 
                 'location_id' => ['type' => 'foreign', 'references' => 'locations,id'],
-                'role' => ['type' => 'string'],
                 'start_date' => ['type' => 'date'],
                 'end_date' => ['type' => 'date', 'nullable' => true],
-                'expected_hours_per_week' => ['type' => 'integer', 'nullable' => true],
                 'agreed_rate' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
                 'pay_rate' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2],
-                'markup_amount' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
-                'markup_percent' => ['type' => 'decimal', 'precision' => 5, 'scale' => 2],
+                'assignment_type' => ['type' => 'string', 'default' => 'standard'], // standard or direct
                 'status' => ['type' => 'string', 'default' => 'active'],
-                'assignment_type' => ['type' => 'string', 'default' => 'ongoing'],
-                'shift_pattern' => ['type' => 'json', 'nullable' => true],
-                'notes' => ['type' => 'text', 'nullable' => true],
                 'created_by_id' => ['type' => 'foreign', 'references' => 'users,id'],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
@@ -630,35 +752,13 @@ return [
             'validation' => [
                 'contract_id' => 'required|exists:employer_agency_contracts,id',
                 'agency_employee_id' => 'required|exists:agency_employees,id',
-                'shift_request_id' => 'required|exists:shift_requests,id', // CHANGED TO REQUIRED
-                'agency_response_id' => 'required|exists:agency_responses,id', // CHANGED TO REQUIRED
                 'location_id' => 'required|exists:locations,id',
                 'start_date' => 'required|date',
-                'agreed_rate' => 'required|numeric|min:0|gte:pay_rate',
-                'pay_rate' => 'required|numeric|min:0',
-                'status' => 'required|in:active,pending,completed,cancelled,suspended'
-            ],
-            'relationships' => [
-                ['type' => 'belongsTo', 'related' => 'EmployerAgencyContract', 'foreign_key' => 'contract_id'],
-                ['type' => 'belongsTo', 'related' => 'AgencyEmployee'],
-                ['type' => 'belongsTo', 'related' => 'ShiftRequest'],
-                ['type' => 'belongsTo', 'related' => 'AgencyResponse'],
-                ['type' => 'belongsTo', 'related' => 'Location'],
-                ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'created_by_id'],
-                ['type' => 'hasMany', 'related' => 'Shift']
-            ],
-            'indexes' => [
-                ['fields' => ['agency_employee_id', 'start_date', 'end_date']],
-                ['fields' => ['contract_id', 'status']],
-                ['fields' => ['agency_employee_id', 'status']],
-                ['fields' => ['agency_response_id'], 'unique' => true] // ADDED UNIQUE CONSTRAINT
+                'assignment_type' => 'required|in:standard,direct'
             ],
             'business_rules' => [
-                'agency_response_validation' => 'Assignment requires accepted agency_response', // ADDED
-                'rate_validation' => 'agreed_rate must be >= pay_rate',
-                'markup_calculation' => 'markup_amount = agreed_rate - pay_rate, markup_percent = (markup_amount / pay_rate) * 100',
-                'contract_active' => 'Assignment requires active employer_agency_contract',
-                'rate_consistency' => 'agreed_rate should match agency_response.proposed_rate' // ADDED
+                'direct_assignment_validation' => 'Direct assignments require employer admin permissions',
+                'standard_assignment_validation' => 'Standard assignments require accepted agency_response',
             ]
         ],
 

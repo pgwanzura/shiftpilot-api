@@ -13,6 +13,14 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->string('national_insurance_number')->nullable();
             $table->date('date_of_birth')->nullable();
+            $table->string('address_line1')->nullable();
+            $table->string('address_line2')->nullable();
+            $table->string('city')->nullable();
+            $table->string('county')->nullable();
+            $table->string('postcode')->nullable();
+            $table->string('country', 2)->nullable()->default('GB');
+            $table->decimal('latitude', 10, 8)->nullable();
+            $table->decimal('longitude', 11, 8)->nullable();
             $table->string('emergency_contact_name')->nullable();
             $table->string('emergency_contact_phone')->nullable();
             $table->json('qualifications')->nullable();

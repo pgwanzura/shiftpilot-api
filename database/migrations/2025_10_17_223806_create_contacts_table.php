@@ -12,9 +12,6 @@ return new class extends Migration
             $table->id();
             $table->foreignId('employer_id')->constrained()->onDelete('cascade');
             $table->foreignId('user_id')->nullable()->constrained()->onDelete('set null');
-            $table->string('name');
-            $table->string('email');
-            $table->string('phone')->nullable();
             $table->string('role')->default('manager');
             $table->boolean('can_approve_timesheets')->default(true);
             $table->boolean('can_approve_assignments')->default(true);

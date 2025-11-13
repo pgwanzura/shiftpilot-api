@@ -11,31 +11,33 @@ use App\Http\Controllers\Auth\{
 use App\Http\Controllers\{
     UserController,
     AgencyController,
-    AgentController, // New
-    EmployerController, // New
-    ContactController, // New
-    EmployeeController, // New
-    LocationController, // New
-    EmployerAgencyContractController, // New
-    ShiftRequestController, // New
-    AgencyResponseController, // New
-    ShiftController, // New
-    ShiftOfferController, // New
-    ShiftApprovalController, // New
-    TimesheetController, // New
-    EmployeeAvailabilityController, // New
-    TimeOffRequestController, // New
-    InvoiceController, // New
-    PaymentController, // New
-    PaymentLogController, // New
-    PayoutController, // New
-    PayrollController, // New
-    RateCardController, // New
-    SubscriptionController, // New
-    AuditLogController, // New
-    SystemNotificationController, // New
-    WebhookSubscriptionController, // New
-    ProfileController, // New
+    AgencyBranchController,
+    AgentController,
+    EmployerController,
+    ContactController,
+    EmployeeController,
+    EmployeePreferencesController,
+    LocationController,
+    EmployerAgencyContractController,
+    ShiftRequestController,
+    AgencyResponseController,
+    ShiftController,
+    ShiftOfferController,
+    ShiftApprovalController,
+    TimesheetController,
+    EmployeeAvailabilityController,
+    TimeOffRequestController,
+    InvoiceController,
+    PaymentController,
+    PaymentLogController,
+    PayoutController,
+    PayrollController,
+    RateCardController,
+    SubscriptionController,
+    AuditLogController,
+    SystemNotificationController,
+    WebhookSubscriptionController,
+    ProfileController,
     AssignmentController,
     CalendarEventsController
 };
@@ -54,6 +56,43 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::post('email/verification-notification', [EmailVerificationNotificationController::class, 'store'])->name('verification.send');
 
+    Route::prefix('agencies/{agency}')->group(function () {
+        Route::get('dashboard', [AgencyController::class, 'dashboard']);
+        Route::get('employees', [AgencyController::class, 'employees']);
+        Route::post('employees', [AgencyController::class, 'registerEmployee']);
+        Route::put('employees/{employeeId}', [AgencyController::class, 'updateEmployee']);
+        Route::get('assignments', [AgencyController::class, 'assignments']);
+        Route::post('assignments', [AgencyController::class, 'createAssignment']);
+        Route::put('assignments/{assignmentId}', [AgencyController::class, 'updateAssignment']);
+        Route::get('contracts', [AgencyController::class, 'contracts']);
+        Route::post('contracts/{employerId}', [AgencyController::class, 'syncEmployerContract']);
+        Route::get('available-employees', [AgencyController::class, 'availableEmployees']);
+        Route::post('timesheets/{timesheetId}/approve', [AgencyController::class, 'approveTimesheet']);
+        Route::get('timesheets', [AgencyController::class, 'getTimesheets']);
+        Route::post('payroll/process', [AgencyController::class, 'processPayroll']);
+        Route::get('payroll', [AgencyController::class, 'getPayroll']);
+        Route::get('payouts', [AgencyController::class, 'getPayouts']);
+        Route::post('assignments/{assignmentId}/invoice', [AgencyController::class, 'generateInvoice']);
+        Route::get('invoices', [AgencyController::class, 'getInvoices']);
+        Route::post('shift-requests/{shiftRequestId}/response', [AgencyController::class, 'submitShiftResponse']);
+        Route::post('responses/{responseId}/assignment', [AgencyController::class, 'createAssignmentFromResponse']);
+        Route::post('shifts/{shiftId}/offer', [AgencyController::class, 'offerShift']);
+        Route::get('shifts', [AgencyController::class, 'getShifts']);
+        Route::post('templates/{templateId}/shift', [AgencyController::class, 'createShiftFromTemplate']);
+        Route::get('response-stats', [AgencyController::class, 'getAgencyResponseStats']);
+    });
+
+    Route::prefix('agency-branches')->group(function () {
+        Route::get('/', [AgencyBranchController::class, 'index']);
+        Route::post('/', [AgencyBranchController::class, 'store']);
+        Route::get('{branch}', [AgencyBranchController::class, 'show']);
+        Route::put('{branch}', [AgencyBranchController::class, 'update']);
+        Route::delete('{branch}', [AgencyBranchController::class, 'destroy']);
+        Route::post('{branch}/head-office', [AgencyBranchController::class, 'setHeadOffice']);
+        Route::get('{branch}/stats', [AgencyBranchController::class, 'stats']);
+        Route::get('{branch}/nearby', [AgencyBranchController::class, 'nearby']);
+    });
+
     // Existing Assignment Routes
     Route::apiResource('assignments', AssignmentController::class);
     Route::prefix('assignments')->group(function () {
@@ -65,6 +104,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('{assignment}/extend', [AssignmentController::class, 'extend']);
         Route::get('statistics', [AssignmentController::class, 'statistics']);
         Route::get('my-assignments', [AssignmentController::class, 'myAssignments']);
+    });
+
+    Route::prefix('employee-preferences')->group(function () {
+        Route::get('/{employee}/preferences', [EmployeePreferencesController::class, 'getByEmployee']);
+        Route::put('/{employee}/preferences', [EmployeePreferencesController::class, 'updateByEmployee']);
+        Route::get('/{preference}/matching-shifts', [EmployeePreferencesController::class, 'getMatchingShifts']);
     });
 
     // Calendar Routes (existing)
@@ -108,11 +153,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/schedule-print', [CalendarEventsController::class, 'printSchedule']);
     });
 
-    // New API Resource Routes for all entities as per schema.php
+
     Route::apiResource('agencies', AgencyController::class);
     Route::apiResource('agents', AgentController::class);
     Route::apiResource('employers', EmployerController::class);
     Route::apiResource('employees', EmployeeController::class);
+    Route::apiResource('employee-preferences', EmployeePreferencesController::class);
     Route::apiResource('contacts', ContactController::class);
     Route::apiResource('locations', LocationController::class);
     Route::apiResource('employer-agency-contracts', EmployerAgencyContractController::class);
@@ -134,7 +180,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('audit-logs', AuditLogController::class);
     Route::apiResource('system-notifications', SystemNotificationController::class);
     Route::apiResource('webhook-subscriptions', WebhookSubscriptionController::class);
-    Route::apiResource('profiles', ProfileController::class); // New Profiles Resource
+    Route::apiResource('profiles', ProfileController::class);
 });
 
 Route::get('/healthcheck', function () {

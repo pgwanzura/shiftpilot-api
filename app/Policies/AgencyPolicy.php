@@ -4,63 +4,66 @@ namespace App\Policies;
 
 use App\Models\Agency;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
 
 class AgencyPolicy
 {
-    /**
-     * Determine whether the user can view any models.
-     */
     public function viewAny(User $user): bool
     {
-        return false;
+        return $user->hasRole('super_admin') ||
+            $user->hasRole('agency_admin');
     }
 
-    /**
-     * Determine whether the user can view the model.
-     */
     public function view(User $user, Agency $agency): bool
     {
-        return false;
+        return $user->hasRole('super_admin') ||
+            ($user->hasRole('agency_admin') && $this->isAgencyUser($user, $agency));
     }
 
-    /**
-     * Determine whether the user can create models.
-     */
     public function create(User $user): bool
     {
-        return false;
+        return $user->hasRole('super_admin') ||
+            $user->hasRole('agency_admin');
     }
 
-    /**
-     * Determine whether the user can update the model.
-     */
     public function update(User $user, Agency $agency): bool
     {
-        return false;
+        return $user->hasRole('super_admin') ||
+            ($user->hasRole('agency_admin') && $this->isAgencyUser($user, $agency));
     }
 
-    /**
-     * Determine whether the user can delete the model.
-     */
     public function delete(User $user, Agency $agency): bool
     {
-        return false;
+        return $user->hasRole('super_admin');
     }
 
-    /**
-     * Determine whether the user can restore the model.
-     */
     public function restore(User $user, Agency $agency): bool
     {
-        return false;
+        return $user->hasRole('super_admin');
     }
 
-    /**
-     * Determine whether the user can permanently delete the model.
-     */
     public function forceDelete(User $user, Agency $agency): bool
     {
-        return false;
+        return $user->hasRole('super_admin');
+    }
+
+    public function manageAgents(User $user, Agency $agency): bool
+    {
+        return $this->update($user, $agency);
+    }
+
+    public function viewFinancials(User $user, Agency $agency): bool
+    {
+        return $this->update($user, $agency);
+    }
+
+    public function updateSubscription(User $user, Agency $agency): bool
+    {
+        return $user->hasRole('super_admin');
+    }
+
+    private function isAgencyUser(User $user, Agency $agency): bool
+    {
+        return $agency->user_id === $user->id ||
+            $agency->agents()->where('user_id', $user->id)->exists();
     }
 }

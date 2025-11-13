@@ -13,9 +13,8 @@ class Agent extends Model
 
     protected $fillable = [
         'agency_id',
-        'name',
-        'email',
-        'phone',
+        'user_id',
+        'branch_id',
         'permissions',
     ];
 
@@ -23,41 +22,21 @@ class Agent extends Model
         'permissions' => 'array',
     ];
 
-    /**
-     * Get the agent's profile.
-     */
-    public function profile(): MorphOne
-    {
-        return $this->morphOne(Profile::class, 'profileable');
-    }
-
-    /**
-     * The agency that the agent belongs to.
-     */
     public function agency(): BelongsTo
     {
         return $this->belongsTo(Agency::class);
     }
 
-    /**
-     * Get agency ID for agent.
-     */
     public function getAgencyId(): ?int
     {
         return $this->agency_id;
     }
 
-    /**
-     * Agents cannot approve assignments directly unless specified otherwise.
-     */
     public function canApproveAssignments(): bool
     {
         return false;
     }
 
-    /**
-     * Agents can approve timesheets.
-     */
     public function canApproveTimesheets(): bool
     {
         // Assuming agents can approve timesheets as per schema roles

@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Support\Facades\DB;
 
 class Assignment extends Model
 {
@@ -44,44 +45,93 @@ class Assignment extends Model
         'pay_rate' => 'decimal:2',
         'markup_amount' => 'decimal:2',
         'markup_percent' => 'decimal:2',
+        'status' => AssignmentStatus::class,
+        'assignment_type' => AssignmentType::class,
     ];
 
     protected $appends = [
         'duration_days',
         'is_ongoing',
         'total_expected_hours',
+        'is_direct_assignment',
+        'is_standard_assignment',
     ];
 
     protected static function booted()
     {
         static::creating(function ($assignment) {
             $assignment->calculateMarkup();
-
-            if (!$assignment->status) {
-                $assignment->status = AssignmentStatus::PENDING;
-            }
+            $assignment->validateAssignmentCreation();
         });
 
         static::updating(function ($assignment) {
             if ($assignment->isDirty(['agreed_rate', 'pay_rate'])) {
                 $assignment->calculateMarkup();
             }
-
-            if ($assignment->isDirty('agreed_rate') && $assignment->agreed_rate < $assignment->pay_rate) {
-                throw new \InvalidArgumentException('Agreed rate cannot be less than pay rate');
-            }
+            $assignment->validateAssignmentUpdate();
         });
     }
 
     public function calculateMarkup(): void
     {
-        $this->markup_amount = $this->agreed_rate - $this->pay_rate;
-
-        if ($this->pay_rate > 0) {
-            $this->markup_percent = ($this->markup_amount / $this->pay_rate) * 100;
-        } else {
-            $this->markup_percent = 0;
+        if ($this->agreed_rate && $this->pay_rate) {
+            $this->markup_amount = $this->agreed_rate - $this->pay_rate;
+            $this->markup_percent = $this->pay_rate > 0 ? ($this->markup_amount / $this->pay_rate) * 100 : 0;
         }
+    }
+
+    public function validateAssignmentCreation(): void
+    {
+        if (!$this->status) {
+            $this->status = AssignmentStatus::PENDING;
+        }
+
+        if (!$this->validateRates()) {
+            throw new \InvalidArgumentException('Agreed rate cannot be less than pay rate');
+        }
+
+        if (!$this->hasActiveContract()) {
+            throw new \InvalidArgumentException('Assignment requires an active contract');
+        }
+
+        if (!$this->hasActiveAgencyEmployee()) {
+            throw new \InvalidArgumentException('Assignment requires an active agency employee');
+        }
+
+        if ($this->assignment_type === AssignmentType::STANDARD && !$this->agency_response_id) {
+            throw new \InvalidArgumentException('Standard assignments require an agency response');
+        }
+
+        if ($this->hasOverlappingAssignments()) {
+            throw new \InvalidArgumentException('Employee has overlapping assignments');
+        }
+    }
+
+    public function validateAssignmentUpdate(): void
+    {
+        if ($this->isDirty('agreed_rate') && $this->agreed_rate < $this->pay_rate) {
+            throw new \InvalidArgumentException('Agreed rate cannot be less than pay rate');
+        }
+
+        if ($this->isDirty('status') && !$this->canChangeStatus($this->getOriginal('status'), $this->status)) {
+            throw new \InvalidArgumentException('Invalid assignment status transition');
+        }
+    }
+
+    public function hasOverlappingAssignments(): bool
+    {
+        return self::where('agency_employee_id', $this->agency_employee_id)
+            ->where('id', '!=', $this->id)
+            ->whereIn('status', AssignmentStatus::activeStates())
+            ->where(function ($query) {
+                $query->whereNull('end_date')
+                    ->orWhere('end_date', '>=', $this->start_date);
+            })
+            ->where(function ($query) {
+                $query->whereNull('end_date')
+                    ->orWhere('start_date', '<=', $this->end_date ?? '9999-12-31');
+            })
+            ->exists();
     }
 
     public function loadRelations(): self
@@ -101,11 +151,17 @@ class Assignment extends Model
 
     public function getAnalyticsData(): array
     {
+        $totalEarnings = $this->timesheets()
+            ->get()
+            ->sum(function ($timesheet) {
+                return $timesheet->hours_worked * $timesheet->shift->hourly_rate;
+            });
+
         return [
             'total_shifts' => $this->shifts()->count(),
             'completed_shifts' => $this->shifts()->where('status', 'completed')->count(),
             'total_hours_worked' => $this->timesheets()->sum('hours_worked'),
-            'total_earnings' => $this->timesheets()->sum(\DB::raw('hours_worked * hourly_rate')),
+            'total_earnings' => $totalEarnings,
             'utilization_rate' => $this->calculateUtilizationRate(),
         ];
     }
@@ -115,11 +171,7 @@ class Assignment extends Model
         $expectedHours = $this->total_expected_hours;
         $actualHours = $this->timesheets()->sum('hours_worked');
 
-        if (!$expectedHours || $expectedHours == 0) {
-            return 0;
-        }
-
-        return min(100, ($actualHours / $expectedHours) * 100);
+        return $expectedHours && $expectedHours > 0 ? min(100, ($actualHours / $expectedHours) * 100) : 0;
     }
 
     public function isActive(): bool
@@ -145,6 +197,16 @@ class Assignment extends Model
     public function isSuspended(): bool
     {
         return $this->status === AssignmentStatus::SUSPENDED;
+    }
+
+    public function isDirectAssignment(): bool
+    {
+        return $this->assignment_type === AssignmentType::DIRECT;
+    }
+
+    public function isStandardAssignment(): bool
+    {
+        return $this->assignment_type === AssignmentType::STANDARD;
     }
 
     public function canBeUpdated(): bool
@@ -175,9 +237,17 @@ class Assignment extends Model
         return $this->isSuspended();
     }
 
-    public function canChangeStatus(): bool
+    public function canChangeStatus(string $fromStatus, string $toStatus): bool
     {
-        return $this->canBeUpdated();
+        $allowedTransitions = [
+            AssignmentStatus::PENDING => [AssignmentStatus::ACTIVE, AssignmentStatus::CANCELLED],
+            AssignmentStatus::ACTIVE => [AssignmentStatus::COMPLETED, AssignmentStatus::SUSPENDED, AssignmentStatus::CANCELLED],
+            AssignmentStatus::SUSPENDED => [AssignmentStatus::ACTIVE, AssignmentStatus::CANCELLED],
+            AssignmentStatus::COMPLETED => [],
+            AssignmentStatus::CANCELLED => [],
+        ];
+
+        return in_array($toStatus, $allowedTransitions[$fromStatus] ?? []);
     }
 
     public function validateRates(): bool
@@ -187,20 +257,32 @@ class Assignment extends Model
 
     public function hasActiveContract(): bool
     {
-        return $this->contract->status === 'active';
+        return $this->contract && $this->contract->status === 'active';
     }
 
     public function hasActiveAgencyEmployee(): bool
     {
-        return $this->agencyEmployee->status === 'active';
+        return $this->agencyEmployee && $this->agencyEmployee->status === 'active';
+    }
+
+    public function hasShifts(): bool
+    {
+        return $this->shifts()->exists();
+    }
+
+    public function hasTimesheets(): bool
+    {
+        return $this->timesheets()->exists();
     }
 
     protected function durationDays(): Attribute
     {
         return Attribute::make(
             get: function () {
-                if (!$this->end_date) return null;
-                return $this->start_date->diffInDays($this->end_date);
+                if (!$this->start_date) {
+                    return null;
+                }
+                return $this->end_date ? $this->start_date->diffInDays($this->end_date) : null;
             }
         );
     }
@@ -208,7 +290,7 @@ class Assignment extends Model
     protected function isOngoing(): Attribute
     {
         return Attribute::make(
-            get: fn() => $this->end_date === null
+            get: fn() => $this->end_date === null && $this->isActive()
         );
     }
 
@@ -221,6 +303,20 @@ class Assignment extends Model
                 }
                 return ($this->expected_hours_per_week / 7) * $this->duration_days;
             }
+        );
+    }
+
+    protected function isDirectAssignmentAppended(): Attribute
+    {
+        return Attribute::make(
+            get: fn() => $this->isDirectAssignment()
+        );
+    }
+
+    protected function isStandardAssignmentAppended(): Attribute
+    {
+        return Attribute::make(
+            get: fn() => $this->isStandardAssignment()
         );
     }
 
@@ -247,6 +343,16 @@ class Assignment extends Model
     public function scopeSuspended($query)
     {
         return $query->where('status', AssignmentStatus::SUSPENDED);
+    }
+
+    public function scopeDirect($query)
+    {
+        return $query->where('assignment_type', AssignmentType::DIRECT);
+    }
+
+    public function scopeStandard($query)
+    {
+        return $query->where('assignment_type', AssignmentType::STANDARD);
     }
 
     public function scopeForAgency($query, $agencyId)
@@ -381,7 +487,7 @@ class Assignment extends Model
         );
     }
 
-    public function shiftTemplates()
+    public function shiftTemplates(): HasMany
     {
         return $this->hasMany(ShiftTemplate::class);
     }

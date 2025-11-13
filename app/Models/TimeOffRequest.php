@@ -2,22 +2,15 @@
 
 namespace App\Models;
 
+use App\Enums\TimeOffRequestStatus;
+use App\Enums\TimeOffType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TimeOffRequest extends Model
 {
     use HasFactory;
-
-    const STATUS_PENDING = 'pending';
-    const STATUS_APPROVED = 'approved';
-    const STATUS_REJECTED = 'rejected';
-
-    const TYPE_VACATION = 'vacation';
-    const TYPE_SICK = 'sick';
-    const TYPE_PERSONAL = 'personal';
-    const TYPE_BEREAVEMENT = 'bereavement';
-    const TYPE_OTHER = 'other';
 
     protected $fillable = [
         'employee_id',
@@ -28,69 +21,79 @@ class TimeOffRequest extends Model
         'reason',
         'status',
         'approved_by_id',
-        'approved_at'
+        'approved_at',
     ];
 
     protected $casts = [
         'start_date' => 'date',
         'end_date' => 'date',
-        'approved_at' => 'datetime'
+        'approved_at' => 'datetime',
+        'type' => TimeOffType::class,
+        'status' => TimeOffRequestStatus::class,
     ];
 
-    public function employee()
+    public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
     }
 
-    public function agency()
+    public function agency(): BelongsTo
     {
         return $this->belongsTo(Agency::class);
     }
 
-    public function approvedBy()
+    public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by_id');
     }
 
-    public function scopePending($query)
+    public function isPending(): bool
     {
-        return $query->where('status', self::STATUS_PENDING);
+        return $this->status->isPending();
     }
 
-    public function scopeApproved($query)
+    public function isApproved(): bool
     {
-        return $query->where('status', self::STATUS_APPROVED);
+        return $this->status->isApproved();
     }
 
-    public function scopeForAgency($query, $agencyId)
+    public function isRejected(): bool
     {
-        return $query->where('agency_id', $agencyId);
+        return $this->status->isRejected();
     }
 
-    public function isPending()
+    public function canBeApproved(): bool
     {
-        return $this->status === self::STATUS_PENDING;
+        return $this->status->canBeApproved();
     }
 
-    public function isApproved()
+    public function canBeRejected(): bool
     {
-        return $this->status === self::STATUS_APPROVED;
+        return $this->status->canBeRejected();
     }
 
-    public function approve($approvedBy)
+    public function approve(User $approvedBy): bool
     {
-        $this->update([
-            'status' => self::STATUS_APPROVED,
+        if (!$this->canBeApproved()) {
+            return false;
+        }
+
+        return $this->update([
+            'status' => TimeOffRequestStatus::APPROVED,
             'approved_by_id' => $approvedBy->id,
             'approved_at' => now(),
         ]);
     }
 
-    public function reject($approvedBy)
+    public function reject(User $rejectedBy): bool
     {
-        $this->update([
-            'status' => self::STATUS_REJECTED,
-            'approved_by_id' => $approvedBy->id,
+        if (!$this->canBeRejected()) {
+            return false;
+        }
+
+        return $this->update([
+            'status' => TimeOffRequestStatus::REJECTED,
+            'approved_by_id' => $rejectedBy->id,
             'approved_at' => now(),
         ]);
     }
