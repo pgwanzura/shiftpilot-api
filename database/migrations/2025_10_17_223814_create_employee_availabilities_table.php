@@ -23,10 +23,7 @@ return new class extends Migration
             $table->json('constraints')->nullable();
             $table->timestamps();
 
-            $table->index(['employee_id', 'days_mask']);
             $table->index(['employee_id', 'start_date', 'end_date']);
-            $table->index(['start_time', 'end_time']);
-            $table->index(['type', 'priority']);
         });
     }
 

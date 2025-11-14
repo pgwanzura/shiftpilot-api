@@ -18,11 +18,8 @@ return new class extends Migration
             $table->json('meta')->nullable();
             $table->timestamps();
 
-            $table->unique(['employer_id', 'email']);
-            $table->index(['user_id']);
+            $table->unique(['employer_id', 'user_id']);
             $table->index(['employer_id', 'role']);
-            $table->index(['can_approve_timesheets']);
-            $table->index(['can_approve_assignments']);
         });
     }
 

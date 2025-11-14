@@ -12,8 +12,8 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('legal_name')->nullable();
-            $table->string('registration_number')->nullable();
-            $table->string('billing_email')->nullable();
+            $table->string('registration_number')->nullable()->unique();
+            $table->string('billing_email')->nullable()->unique();
             $table->string('phone')->nullable();
             $table->string('website')->nullable();
             $table->string('address_line1')->nullable();
@@ -28,14 +28,8 @@ return new class extends Migration
             $table->json('meta')->nullable();
             $table->timestamps();
 
-
-            $table->index(['name']);
-            $table->index(['registration_number']);
-            $table->index(['billing_email']);
-            $table->index(['status']);
-            $table->index(['country']);
-            $table->index(['industry']);
-            $table->index(['created_at']);
+            $table->index(['status', 'country']);
+            $table->index(['country', 'industry']);
         });
     }
 

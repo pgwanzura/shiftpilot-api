@@ -30,7 +30,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
-class EmployeeController extends Controller
+class EmployeeSelfServiceController extends Controller
 {
     public function __construct(
         private EmployeeService $employeeService
@@ -40,7 +40,6 @@ class EmployeeController extends Controller
     {
         $employee = auth()->user()->employee;
         $stats = $this->employeeService->getDashboardStats($employee);
-
         return response()->json([
             'success' => true,
             'data' => new DashboardStatsResource($stats),
@@ -51,12 +50,9 @@ class EmployeeController extends Controller
     public function clockIn(Shift $shift): JsonResponse
     {
         Gate::authorize('clock-in', $shift);
-
         $employee = auth()->user()->employee;
         $timesheet = $this->employeeService->clockIn($shift, $employee);
-
         event(new TimesheetSubmitted($employee, $timesheet));
-
         return response()->json([
             'success' => true,
             'data' => new TimesheetResource($timesheet->load('shift.assignment')),
@@ -67,10 +63,8 @@ class EmployeeController extends Controller
     public function clockOut(Shift $shift): JsonResponse
     {
         Gate::authorize('clock-out', $shift);
-
         $employee = auth()->user()->employee;
         $timesheet = $this->employeeService->clockOut($shift, $employee);
-
         return response()->json([
             'success' => true,
             'data' => new TimesheetResource($timesheet->load('shift.assignment')),
@@ -78,11 +72,10 @@ class EmployeeController extends Controller
         ]);
     }
 
-    public function getAvailability(Request $request): JsonResponse
+    public function getAvailability(): JsonResponse
     {
         $employee = auth()->user()->employee;
         $availability = $this->employeeService->getAvailability($employee);
-
         return response()->json([
             'success' => true,
             'data' => EmployeeAvailabilityResource::collection($availability),
@@ -94,7 +87,6 @@ class EmployeeController extends Controller
     {
         $employee = auth()->user()->employee;
         $payroll = $this->employeeService->getPayrollHistory($employee, $request->all());
-
         return response()->json([
             'success' => true,
             'data' => PayrollResource::collection($payroll),
@@ -106,7 +98,6 @@ class EmployeeController extends Controller
     {
         $employee = auth()->user()->employee;
         $shifts = $this->employeeService->getShifts($employee, $request->all());
-
         return response()->json([
             'success' => true,
             'data' => ShiftResource::collection($shifts),
@@ -118,7 +109,6 @@ class EmployeeController extends Controller
     {
         $employee = auth()->user()->employee;
         $timesheets = $this->employeeService->getTimesheets($employee, $request->all());
-
         return response()->json([
             'success' => true,
             'data' => TimesheetResource::collection($timesheets),
@@ -130,7 +120,6 @@ class EmployeeController extends Controller
     {
         $employee = auth()->user()->employee;
         $shiftOffers = $this->employeeService->getShiftOffers($employee, $request->all());
-
         return response()->json([
             'success' => true,
             'data' => ShiftOfferResource::collection($shiftOffers),
@@ -142,7 +131,6 @@ class EmployeeController extends Controller
     {
         $employee = auth()->user()->employee;
         $assignments = $this->employeeService->getCurrentAssignments($employee);
-
         return response()->json([
             'success' => true,
             'data' => AssignmentResource::collection($assignments),
@@ -154,7 +142,6 @@ class EmployeeController extends Controller
     {
         $employee = auth()->user()->employee;
         $preferences = $employee->preferences;
-
         return response()->json([
             'success' => true,
             'data' => $preferences ? new EmployeePreferencesResource($preferences) : null,
@@ -166,7 +153,6 @@ class EmployeeController extends Controller
     {
         $employee = auth()->user()->employee;
         $preferences = $this->employeeService->updatePreferences($employee, $request->validated());
-
         return response()->json([
             'success' => true,
             'data' => new EmployeePreferencesResource($preferences),
@@ -177,7 +163,6 @@ class EmployeeController extends Controller
     public function respondToShiftOffer(ShiftOffer $shiftOffer, RespondToShiftOfferRequest $request): JsonResponse
     {
         Gate::authorize('respond', $shiftOffer);
-
         $employee = auth()->user()->employee;
         $updatedOffer = $this->employeeService->respondToShiftOffer(
             $shiftOffer,
@@ -185,7 +170,6 @@ class EmployeeController extends Controller
             $request->validated('accept'),
             $request->validated('notes')
         );
-
         return response()->json([
             'success' => true,
             'data' => new ShiftOfferResource($updatedOffer->load('shift.assignment')),
@@ -197,9 +181,7 @@ class EmployeeController extends Controller
     {
         $employee = auth()->user()->employee;
         $availability = $this->employeeService->setAvailability($employee, $request->validated());
-
         event(new EmployeeAvailabilityUpdated($employee));
-
         return response()->json([
             'success' => true,
             'data' => new EmployeeAvailabilityResource($availability),
@@ -210,12 +192,9 @@ class EmployeeController extends Controller
     public function updateAvailability(EmployeeAvailability $availability, UpdateAvailabilityRequest $request): JsonResponse
     {
         Gate::authorize('update', $availability);
-
         $employee = auth()->user()->employee;
         $updatedAvailability = $this->employeeService->updateAvailability($availability, $employee, $request->validated());
-
         event(new EmployeeAvailabilityUpdated($employee));
-
         return response()->json([
             'success' => true,
             'data' => new EmployeeAvailabilityResource($updatedAvailability),
@@ -226,12 +205,9 @@ class EmployeeController extends Controller
     public function deleteAvailability(EmployeeAvailability $availability): JsonResponse
     {
         Gate::authorize('delete', $availability);
-
         $employee = auth()->user()->employee;
         $this->employeeService->deleteAvailability($availability, $employee);
-
         event(new EmployeeAvailabilityUpdated($employee));
-
         return response()->json([
             'success' => true,
             'message' => 'Availability deleted successfully'
@@ -242,9 +218,7 @@ class EmployeeController extends Controller
     {
         $employee = auth()->user()->employee;
         $timeOffRequest = $this->employeeService->submitTimeOffRequest($employee, $request->validated());
-
         event(new TimeOffRequested($employee, $timeOffRequest));
-
         return response()->json([
             'success' => true,
             'data' => new TimeOffRequestResource($timeOffRequest->load('agency')),
@@ -259,7 +233,6 @@ class EmployeeController extends Controller
             ->with('agency')
             ->orderBy('created_at', 'desc')
             ->paginate($request->get('per_page', 15));
-
         return response()->json([
             'success' => true,
             'data' => TimeOffRequestResource::collection($timeOffRequests),

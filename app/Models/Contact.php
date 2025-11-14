@@ -27,13 +27,6 @@ class Contact extends Model
         'meta' => 'array',
     ];
 
-    /**
-     * Get the contact's profile.
-     */
-    public function profile(): MorphOne
-    {
-        return $this->morphOne(Profile::class, 'profileable');
-    }
 
     /**
      * The employer that the contact belongs to.

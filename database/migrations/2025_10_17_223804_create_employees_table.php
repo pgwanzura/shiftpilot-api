@@ -29,10 +29,8 @@ return new class extends Migration
             $table->json('meta')->nullable();
             $table->timestamps();
 
-            $table->index(['user_id']);
-            $table->index(['national_insurance_number']);
-            $table->index(['status']);
-            $table->index(['date_of_birth']);
+            $table->unique(['national_insurance_number']);
+            $table->index(['status', 'country']);
         });
     }
 

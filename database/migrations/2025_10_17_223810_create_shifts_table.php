@@ -1,5 +1,4 @@
 <?php
-// database/migrations/2024_01_01_000001_create_shifts_table.php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -21,8 +20,7 @@ return new class extends Migration
             $table->json('meta')->nullable();
             $table->timestamps();
 
-            $table->index(['assignment_id', 'start_time', 'end_time']);
-            $table->index(['start_time', 'end_time']);
+            $table->index(['assignment_id', 'shift_date']);
             $table->index(['shift_date', 'status']);
         });
     }

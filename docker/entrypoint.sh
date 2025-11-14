@@ -14,7 +14,7 @@ cd /var/www/html
 php -r "if (function_exists('opcache_reset')) { opcache_reset(); echo 'OPCache reset.'; }"
 
 echo "Running database migrations..."
-php artisan migrate --force --no-interaction
+php artisan migrate:fresh --force --no-interaction
 
 # Create Xdebug log file with proper permissions
 touch /var/log/xdebug.log

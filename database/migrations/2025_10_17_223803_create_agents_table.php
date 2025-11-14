@@ -13,6 +13,8 @@ return new class() extends Migration {
             $table->foreignId('agency_id')->constrained()->onDelete('cascade');
             $table->json('permissions')->nullable();
             $table->timestamps();
+
+            $table->unique(['agency_id', 'user_id']);
         });
     }
 

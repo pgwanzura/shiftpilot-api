@@ -30,10 +30,9 @@ return new class extends Migration
             $table->foreignId('created_by_id')->constrained('users');
             $table->timestamps();
 
-            $table->index(['agency_employee_id', 'start_date', 'end_date']);
-            $table->index(['contract_id', 'status']);
             $table->index(['agency_employee_id', 'status']);
-            $table->index(['assignment_type', 'status']);
+            $table->index(['contract_id', 'status']);
+            $table->index(['status', 'start_date']);
         });
     }
 

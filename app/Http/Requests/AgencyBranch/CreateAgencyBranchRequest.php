@@ -5,7 +5,7 @@ namespace App\Http\Requests\AgencyBranch;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class CreateBranchRequest extends FormRequest
+class CreateAgencyBranchRequest extends FormRequest
 {
     public function authorize(): bool
     {

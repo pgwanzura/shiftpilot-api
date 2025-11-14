@@ -24,10 +24,6 @@ return new class() extends Migration {
             $table->rememberToken();
             $table->timestamps();
 
-            $table->index(['postcode']);
-            $table->index(['city']);
-            $table->index(['country']);
-            $table->index(['latitude', 'longitude']);
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {

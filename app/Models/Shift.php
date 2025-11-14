@@ -1,5 +1,4 @@
 <?php
-// app/Models/Shift.php
 
 namespace App\Models;
 
@@ -32,6 +31,7 @@ class Shift extends Model
         'start_time' => 'datetime',
         'end_time' => 'datetime',
         'hourly_rate' => 'decimal:2',
+        'status' => ShiftStatus::class,
         'meta' => 'array',
     ];
 
@@ -50,8 +50,11 @@ class Shift extends Model
                 $shift->shift_date = $shift->start_time->toDateString();
             }
 
-            if (!$shift->hourly_rate && $shift->assignment) {
-                $shift->hourly_rate = $shift->assignment->pay_rate;
+            if (!$shift->hourly_rate && $shift->assignment_id) {
+                $assignment = Assignment::find($shift->assignment_id);
+                if ($assignment) {
+                    $shift->hourly_rate = $assignment->pay_rate;
+                }
             }
         });
 
@@ -101,7 +104,7 @@ class Shift extends Model
 
     public function canBeUpdated(): bool
     {
-        return $this->status->canBeUpdated();
+        return in_array($this->status, [ShiftStatus::SCHEDULED, ShiftStatus::IN_PROGRESS]);
     }
 
     public function canBeCancelled(): bool
@@ -277,8 +280,8 @@ class Shift extends Model
 
     public function scopeForAgency($query, $agencyId)
     {
-        return $query->whereHas('assignment.agencyEmployee', function ($q) use ($agencyId) {
-            $q->where('agency_id', $agencyId);
+        return $query->whereHas('assignment.contract.agency', function ($q) use ($agencyId) {
+            $q->where('id', $agencyId);
         });
     }
 
@@ -362,12 +365,12 @@ class Shift extends Model
     {
         return $this->hasOneThrough(
             Employee::class,
-            Assignment::class,
+            AgencyEmployee::class,
             'id',
             'id',
-            'assignment_id',
-            'agency_employee_id'
-        )->through('agencyEmployee');
+            'assignment.agency_employee_id',
+            'employee_id'
+        );
     }
 
     public function agency()
@@ -378,8 +381,8 @@ class Shift extends Model
             'id',
             'id',
             'assignment_id',
-            'agency_employee_id'
-        )->through('agencyEmployee');
+            'agency_id'
+        );
     }
 
     public function employer()
@@ -390,13 +393,13 @@ class Shift extends Model
             'id',
             'id',
             'assignment_id',
-            'contract_id'
-        )->through('contract');
+            'employer_id'
+        );
     }
 
     private function hasTimeOffConflict(int $employeeId, Carbon $shiftDate): bool
     {
-        return \App\Models\TimeOffRequest::where('employee_id', $employeeId)
+        return TimeOffRequest::where('employee_id', $employeeId)
             ->where('status', 'approved')
             ->whereDate('start_date', '<=', $shiftDate)
             ->whereDate('end_date', '>=', $shiftDate)
@@ -411,7 +414,7 @@ class Shift extends Model
         string $dayOfWeek
     ): bool {
 
-        $availabilities = \App\Models\EmployeeAvailability::where('employee_id', $employeeId)
+        $availabilities = EmployeeAvailability::where('employee_id', $employeeId)
             ->where(function ($query) use ($shiftDate) {
                 $query->where('start_date', '<=', $shiftDate)
                     ->where(function ($q) use ($shiftDate) {
@@ -467,7 +470,6 @@ class Shift extends Model
 
     private function isWithinAvailableBlock($availability, string $dayOfWeek, Carbon $startTime, Carbon $endTime): bool
     {
-
         $dayBitmask = $this->getDayBitmask($dayOfWeek);
 
         if (!($availability->days_mask & $dayBitmask)) {
@@ -497,7 +499,7 @@ class Shift extends Model
 
     private function hasSchedulingConflict(int $employeeId, Carbon $startTime, Carbon $endTime): bool
     {
-        return \App\Models\Shift::whereHas('assignment.agencyEmployee', function ($query) use ($employeeId) {
+        return Shift::whereHas('assignment.agencyEmployee', function ($query) use ($employeeId) {
             $query->where('employee_id', $employeeId);
         })
             ->where('id', '!=', $this->id)

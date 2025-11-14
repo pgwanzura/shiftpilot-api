@@ -9,16 +9,27 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Employee extends Model
 {
     use HasFactory;
 
+    const STATUS_ACTIVE = 'active';
+    const STATUS_INACTIVE = 'inactive';
+    const STATUS_SUSPENDED = 'suspended';
+
     protected $fillable = [
         'user_id',
         'national_insurance_number',
         'date_of_birth',
+        'address_line1',
+        'address_line2',
+        'city',
+        'county',
+        'postcode',
+        'country',
+        'latitude',
+        'longitude',
         'emergency_contact_name',
         'emergency_contact_phone',
         'qualifications',
@@ -32,12 +43,15 @@ class Employee extends Model
         'qualifications' => 'array',
         'certifications' => 'array',
         'meta' => 'array',
+        'latitude' => 'decimal:8',
+        'longitude' => 'decimal:8',
     ];
 
     protected $appends = [
         'age',
         'is_active',
         'has_active_agencies',
+        'full_address',
     ];
 
     public function user(): BelongsTo
@@ -45,14 +59,9 @@ class Employee extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function profile(): MorphOne
-    {
-        return $this->morphOne(Profile::class, 'profileable');
-    }
-
     public function preferences(): HasOne
     {
-        return $this->hasOne(EmployeePreferences::class);
+        return $this->hasOne(EmployeePreference::class);
     }
 
     public function agencyEmployees(): HasMany
@@ -63,7 +72,6 @@ class Employee extends Model
     public function agencies(): BelongsToMany
     {
         return $this->belongsToMany(Agency::class, 'agency_employees')
-            ->using(AgencyEmployee::class)
             ->withPivot('position', 'pay_rate', 'employment_type', 'status', 'contract_start_date', 'contract_end_date')
             ->withTimestamps();
     }
@@ -134,17 +142,17 @@ class Employee extends Model
 
     public function scopeActive($query)
     {
-        return $query->where('status', 'active');
+        return $query->where('status', self::STATUS_ACTIVE);
     }
 
     public function scopeInactive($query)
     {
-        return $query->where('status', 'inactive');
+        return $query->where('status', self::STATUS_INACTIVE);
     }
 
     public function scopeSuspended($query)
     {
-        return $query->where('status', 'suspended');
+        return $query->where('status', self::STATUS_SUSPENDED);
     }
 
     public function scopeWithActiveAgencies($query)
@@ -156,7 +164,11 @@ class Employee extends Model
 
     public function scopeWithQualifications($query, array $qualifications)
     {
-        return $query->whereJsonContains('qualifications', $qualifications);
+        return $query->where(function ($q) use ($qualifications) {
+            foreach ($qualifications as $qualification) {
+                $q->orWhereJsonContains('qualifications', $qualification);
+            }
+        });
     }
 
     public function scopeAvailableForShift($query, $startTime, $endTime)
@@ -191,7 +203,7 @@ class Employee extends Model
 
     public function getIsActiveAttribute(): bool
     {
-        return $this->status === 'active';
+        return $this->status === self::STATUS_ACTIVE;
     }
 
     public function getHasActiveAgenciesAttribute(): bool
@@ -199,19 +211,33 @@ class Employee extends Model
         return $this->agencyEmployees()->where('status', 'active')->exists();
     }
 
+    public function getFullAddressAttribute(): string
+    {
+        $addressParts = array_filter([
+            $this->address_line1,
+            $this->address_line2,
+            $this->city,
+            $this->county,
+            $this->postcode,
+            $this->country,
+        ]);
+
+        return implode(', ', $addressParts);
+    }
+
     public function isActive(): bool
     {
-        return $this->status === 'active';
+        return $this->status === self::STATUS_ACTIVE;
     }
 
     public function isSuspended(): bool
     {
-        return $this->status === 'suspended';
+        return $this->status === self::STATUS_SUSPENDED;
     }
 
     public function isInactive(): bool
     {
-        return $this->status === 'inactive';
+        return $this->status === self::STATUS_INACTIVE;
     }
 
     public function canWork(): bool
@@ -323,7 +349,7 @@ class Employee extends Model
     {
         return $this->shifts()
             ->where('start_time', '>=', now())
-            ->whereIn('status', ['scheduled', 'pending_approval', 'approved'])
+            ->whereIn('status', ['scheduled', 'in_progress'])
             ->orderBy('start_time')
             ->get();
     }
@@ -331,14 +357,14 @@ class Employee extends Model
     public function getTotalHoursWorked($startDate = null, $endDate = null)
     {
         $query = $this->timesheets()
-            ->where('status', 'employer_approved');
+            ->where('status', 'approved');
 
         if ($startDate) {
-            $query->where('created_at', '>=', $startDate);
+            $query->where('pay_period_start', '>=', $startDate);
         }
 
         if ($endDate) {
-            $query->where('created_at', '<=', $endDate);
+            $query->where('pay_period_end', '<=', $endDate);
         }
 
         return $query->sum('hours_worked');
@@ -355,7 +381,7 @@ class Employee extends Model
             return false;
         }
 
-        return $this->update(['status' => 'suspended']);
+        return $this->update(['status' => self::STATUS_SUSPENDED]);
     }
 
     public function activate(): bool
@@ -364,7 +390,7 @@ class Employee extends Model
             return false;
         }
 
-        return $this->update(['status' => 'active']);
+        return $this->update(['status' => self::STATUS_ACTIVE]);
     }
 
     public function deactivate(): bool
@@ -373,6 +399,42 @@ class Employee extends Model
             return false;
         }
 
-        return $this->update(['status' => 'inactive']);
+        return $this->update(['status' => self::STATUS_INACTIVE]);
+    }
+
+    public function hasGeoLocation(): bool
+    {
+        return !is_null($this->latitude) && !is_null($this->longitude);
+    }
+
+    public function getActiveAgencyEmployees()
+    {
+        return $this->agencyEmployees()->where('status', 'active')->get();
+    }
+
+    public function getPrimaryAgency()
+    {
+        return $this->agencies()->wherePivot('status', 'active')->first();
+    }
+
+    public function hasCompleteProfile(): bool
+    {
+        $requiredFields = [
+            'national_insurance_number',
+            'date_of_birth',
+            'address_line1',
+            'city',
+            'postcode',
+            'emergency_contact_name',
+            'emergency_contact_phone'
+        ];
+
+        foreach ($requiredFields as $field) {
+            if (empty($this->$field)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

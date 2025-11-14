@@ -14,8 +14,8 @@ return new class extends Migration
             $table->foreignId('employee_id')->constrained()->onDelete('cascade');
             $table->string('position')->nullable();
             $table->decimal('pay_rate', 8, 2);
-            $table->string('employment_type')->default('temp');
-            $table->string('status')->default('active');
+            $table->enum('employment_type', ['temp', 'contract'])->default('temp');
+            $table->enum('status', ['active', 'inactive', 'suspended', 'terminated'])->default('active');
             $table->date('contract_start_date')->nullable();
             $table->date('contract_end_date')->nullable();
             $table->json('specializations')->nullable();

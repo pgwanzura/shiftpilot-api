@@ -2,19 +2,18 @@
 
 namespace App\Services;
 
-use App\Contracts\AvailabilityServiceInterface;
 use App\Models\Employee;
 use App\Models\EmployeeAvailability;
 use App\Models\TimeOffRequest;
-use App\Http\Requests\EmployeeAvailabilityRequest;
-use App\Http\Requests\TimeOffRequestRequest;
+use App\Enums\TimeOffRequestStatus;
+use App\Events\TimeOff\TimeOffRejected;
 use App\Events\AvailabilityUpdated;
-use App\Events\TimeOffRequested;
-use App\Events\TimeOffApproved;
+use App\Events\TimeOff\TimeOffRequested;
+use App\Events\TimeOff\TimeOffApproved;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\Collection;
 
-class EmployeeAvailabilityService implements AvailabilityServiceInterface
+class EmployeeAvailabilityService
 {
     public function __construct(
         private ConflictDetectionService $conflictService
@@ -59,7 +58,7 @@ class EmployeeAvailabilityService implements AvailabilityServiceInterface
                 'end_date' => $timeOffData['end_date'],
                 'type' => $timeOffData['type'],
                 'reason' => $timeOffData['reason'] ?? null,
-                'status' => TimeOffRequest::STATUS_PENDING,
+                'status' => TimeOffRequestStatus::PENDING, // Use enum case
             ]);
 
             event(new TimeOffRequested($timeOffRequest));
@@ -72,12 +71,25 @@ class EmployeeAvailabilityService implements AvailabilityServiceInterface
     {
         DB::transaction(function () use ($timeOffRequest, $approvedById) {
             $timeOffRequest->update([
-                'status' => TimeOffRequest::STATUS_APPROVED,
+                'status' => TimeOffRequestStatus::APPROVED, // Use enum case
                 'approved_by_id' => $approvedById,
                 'approved_at' => now(),
             ]);
 
             event(new TimeOffApproved($timeOffRequest));
+        });
+    }
+
+    public function rejectTimeOff(TimeOffRequest $timeOffRequest, int $rejectedById): void
+    {
+        DB::transaction(function () use ($timeOffRequest, $rejectedById) {
+            $timeOffRequest->update([
+                'status' => TimeOffRequestStatus::REJECTED,
+                'approved_by_id' => $rejectedById,
+                'approved_at' => now(),
+            ]);
+
+            event(new TimeOffRejected($timeOffRequest));
         });
     }
 
@@ -101,5 +113,72 @@ class EmployeeAvailabilityService implements AvailabilityServiceInterface
                 return $availability->employee;
             })
             ->unique();
+    }
+
+    /**
+     * Check if an employee is available during a specific time period
+     */
+    public function isEmployeeAvailable(int $employeeId, string $startTime, string $endTime): bool
+    {
+        $employee = Employee::findOrFail($employeeId);
+        $conflicts = $this->conflictService->findConflictingShifts($employee, $startTime, $endTime);
+
+        return $conflicts->isEmpty();
+    }
+
+    /**
+     * Get available employees for a time period
+     */
+    public function getAvailableEmployees(string $startTime, string $endTime): array
+    {
+        $start = new \DateTime($startTime);
+        $end = new \DateTime($endTime);
+
+        return $this->findAvailableEmployees($start, $end)->all();
+    }
+
+    /**
+     * Check for scheduling conflicts
+     */
+    public function checkForConflicts(int $employeeId, string $startTime, string $endTime, ?int $excludeEventId = null): array
+    {
+        $employee = Employee::findOrFail($employeeId);
+        $conflicts = $this->conflictService->findConflictingShifts($employee, $startTime, $endTime);
+
+        return $conflicts->toArray();
+    }
+
+    /**
+     * Get time off requests by status
+     */
+    public function getTimeOffRequestsByStatus(TimeOffRequestStatus $status): Collection
+    {
+        return TimeOffRequest::where('status', $status)->get();
+    }
+
+    /**
+     * Check if time off request can be approved
+     */
+    public function canApproveTimeOff(TimeOffRequest $timeOffRequest): bool
+    {
+        return $timeOffRequest->status->canBeApproved();
+    }
+
+    /**
+     * Check if time off request can be rejected
+     */
+    public function canRejectTimeOff(TimeOffRequest $timeOffRequest): bool
+    {
+        return $timeOffRequest->status->canBeRejected();
+    }
+
+    /**
+     * Get pending time off requests for an employee
+     */
+    public function getPendingTimeOffRequests(Employee $employee): Collection
+    {
+        return TimeOffRequest::where('employee_id', $employee->id)
+            ->where('status', TimeOffRequestStatus::PENDING)
+            ->get();
     }
 }

@@ -36,7 +36,6 @@ class UpdateAgencyBranchRequest extends FormRequest
             'contact_name' => 'nullable|string|max:255',
             'contact_email' => 'nullable|email|max:255',
             'contact_phone' => 'nullable|string|max:20',
-            'is_head_office' => 'boolean',
             'status' => ['sometimes', 'required', Rule::in(\App\Enums\AgencyBranchStatus::values())],
             'opening_hours' => 'nullable|array',
             'services_offered' => 'nullable|array',

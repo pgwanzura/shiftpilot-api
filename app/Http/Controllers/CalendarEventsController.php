@@ -20,11 +20,7 @@ class CalendarEventsController extends Controller
 
     public function index(CalendarEventsRequest $request): JsonResponse
     {
-        $events = $this->calendarService->getEventsForUser(
-            $request->user(),
-            $request->validated()
-        );
-
+        $events = $this->calendarService->getEventsForUser($request->user(), $request->validated());
         $roleConfig = $this->filtersService->getRoleBasedConfig($request->user()->role, $request);
 
         return response()->json([
@@ -38,357 +34,151 @@ class CalendarEventsController extends Controller
         ]);
     }
 
+    public function getFilterOptions(Request $request): JsonResponse
+    {
+        $options = $this->filtersService->getAvailableFilters($request->user()->role);
+        return response()->json(['success' => true, 'data' => $options]);
+    }
+
+    public function getCalendarConfig(Request $request): JsonResponse
+    {
+        $config = $this->calendarService->getCalendarConfig($request->user());
+        $filterConfig = $this->filtersService->getRoleBasedConfig($request->user()->role, $request);
+        return response()->json(['success' => true, 'data' => array_merge($config, $filterConfig)]);
+    }
+
     public function upcomingShifts(Request $request): JsonResponse
     {
         $shifts = $this->calendarService->getUpcomingShifts($request->user());
-
-        return response()->json([
-            'success' => true,
-            'data' => CalendarEventResource::collection($shifts)
-        ]);
+        return response()->json(['success' => true, 'data' => CalendarEventResource::collection($shifts)]);
     }
 
     public function pendingActions(Request $request): JsonResponse
     {
-        $events = $this->calendarService->getPendingActions($request->user());
-
-        return response()->json([
-            'success' => true,
-            'data' => CalendarEventResource::collection($events)
-        ]);
+        $actions = $this->calendarService->getPendingActions($request->user());
+        return response()->json(['success' => true, 'data' => $actions]);
     }
 
-    public function urgentShifts(Request $request): JsonResponse
+    public function availabilityConflicts(Request $request): JsonResponse
     {
-        $shifts = $this->calendarService->getUrgentShifts($request->user());
-
-        return response()->json([
-            'success' => true,
-            'data' => CalendarEventResource::collection($shifts)
-        ]);
+        $conflicts = $this->calendarService->getAvailabilityConflicts($request->user());
+        return response()->json(['success' => true, 'data' => $conflicts]);
     }
 
     public function eventStats(Request $request): JsonResponse
     {
         $stats = $this->calendarService->getEventStats($request->user());
-
-        return response()->json([
-            'success' => true,
-            'data' => $stats
-        ]);
+        return response()->json(['success' => true, 'data' => $stats]);
     }
 
     public function workloadOverview(Request $request): JsonResponse
     {
         $overview = $this->calendarService->getWorkloadOverview($request->user());
-
-        return response()->json([
-            'success' => true,
-            'data' => $overview
-        ]);
+        return response()->json(['success' => true, 'data' => $overview]);
     }
 
-    public function getConfig(Request $request): JsonResponse
+    public function executeAction(CalendarActionRequest $request, string $eventType, string $eventId): JsonResponse
     {
-        $roleConfig = $this->filtersService->getRoleBasedConfig($request->user()->role, $request);
-
-        return response()->json([
-            'success' => true,
-            'data' => $roleConfig
-        ]);
+        $result = $this->calendarService->executeEventAction($request->user(), $eventType, $eventId, $request->validated());
+        return response()->json(['success' => true, 'data' => $result, 'message' => 'Action completed successfully']);
     }
 
-    public function getFilterOptions(Request $request): JsonResponse
-    {
-        $options = $this->calendarService->getFilterOptions($request->user());
-
-        return response()->json([
-            'success' => true,
-            'data' => $options
-        ]);
-    }
-
-    public function executeAction(CalendarActionRequest $request, string $event): JsonResponse
-    {
-        $result = $this->calendarService->executeEventAction(
-            $request->user(),
-            $event,
-            $request->validated()
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $result,
-            'message' => 'Action completed successfully'
-        ]);
-    }
-
-    public function offerShift(Request $request, string $shift): JsonResponse
+    public function offerShift(Request $request, string $shiftId): JsonResponse
     {
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
-            'expires_at' => 'sometimes|date|after:now'
+            'agency_employee_id' => 'required|exists:agency_employees,id',
+            'expires_at' => 'required|date|after:now'
         ]);
-
-        $result = $this->calendarService->offerShiftToEmployee(
-            $request->user(),
-            $shift,
-            $validated
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $result,
-            'message' => 'Shift offered successfully'
-        ]);
+        $result = $this->calendarService->offerShift($request->user(), $shiftId, $validated);
+        return response()->json(['success' => true, 'data' => $result, 'message' => 'Shift offered successfully']);
     }
 
-    public function assignShift(Request $request, string $shift): JsonResponse
+    public function respondToShiftOffer(Request $request, string $offerId): JsonResponse
     {
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id'
-        ]);
-
-        $result = $this->calendarService->assignShiftToEmployee(
-            $request->user(),
-            $shift,
-            $validated
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $result,
-            'message' => 'Shift assigned successfully'
-        ]);
-    }
-
-    public function completeShift(Request $request, string $shift): JsonResponse
-    {
-        $validated = $request->validate([
+            'status' => 'required|in:accepted,rejected',
             'notes' => 'sometimes|string|max:500'
         ]);
-
-        $result = $this->calendarService->completeShift(
-            $request->user(),
-            $shift,
-            $validated
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $result,
-            'message' => 'Shift completed successfully'
-        ]);
+        $result = $this->calendarService->respondToShiftOffer($request->user(), $offerId, $validated);
+        return response()->json(['success' => true, 'data' => $result, 'message' => 'Shift offer response submitted']);
     }
 
-    public function approveShift(Request $request, string $shift): JsonResponse
+    public function clockIn(Request $request, string $shiftId): JsonResponse
+    {
+        $validated = $request->validate([
+            'notes' => 'sometimes|string|max:500',
+            'location_verified' => 'sometimes|boolean'
+        ]);
+        $result = $this->calendarService->clockIn($request->user(), $shiftId, $validated);
+        return response()->json(['success' => true, 'data' => $result, 'message' => 'Clocked in successfully']);
+    }
+
+    public function clockOut(Request $request, string $shiftId): JsonResponse
+    {
+        $validated = $request->validate([
+            'notes' => 'sometimes|string|max:500',
+            'break_minutes' => 'required|integer|min:0|max:180'
+        ]);
+        $result = $this->calendarService->clockOut($request->user(), $shiftId, $validated);
+        return response()->json(['success' => true, 'data' => $result, 'message' => 'Clocked out successfully']);
+    }
+
+    public function approveTimesheet(Request $request, string $timesheetId): JsonResponse
     {
         $validated = $request->validate([
             'approval_type' => 'required|in:agency,employer',
             'notes' => 'sometimes|string|max:500'
         ]);
-
-        $result = $this->calendarService->approveShift(
-            $request->user(),
-            $shift,
-            $validated
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $result,
-            'message' => 'Shift approved successfully'
-        ]);
-    }
-
-    public function clockIn(Request $request, string $shift): JsonResponse
-    {
-        $validated = $request->validate([
-            'location' => 'sometimes|array',
-            'notes' => 'sometimes|string|max:500'
-        ]);
-
-        $result = $this->calendarService->clockIn(
-            $request->user(),
-            $shift,
-            $validated
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $result,
-            'message' => 'Clocked in successfully'
-        ]);
-    }
-
-    public function clockOut(Request $request, string $shift): JsonResponse
-    {
-        $validated = $request->validate([
-            'notes' => 'sometimes|string|max:500',
-            'break_minutes' => 'sometimes|integer|min:0'
-        ]);
-
-        $result = $this->calendarService->clockOut(
-            $request->user(),
-            $shift,
-            $validated
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $result,
-            'message' => 'Clocked out successfully'
-        ]);
-    }
-
-    public function getAvailability(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'start_date' => 'sometimes|date',
-            'end_date' => 'sometimes|date|after_or_equal:start_date'
-        ]);
-
-        $availability = $this->calendarService->getEmployeeAvailability(
-            $request->user(),
-            $validated
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $availability
-        ]);
+        $result = $this->calendarService->approveTimesheet($request->user(), $timesheetId, $validated);
+        return response()->json(['success' => true, 'data' => $result, 'message' => 'Timesheet approved successfully']);
     }
 
     public function updateAvailability(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'availabilities' => 'required|array',
-            'availabilities.*.type' => 'required|in:recurring,one_time',
-            'availabilities.*.day_of_week' => 'required_if:type,recurring',
-            'availabilities.*.start_date' => 'required_if:type,one_time|date',
-            'availabilities.*.end_date' => 'required_if:type,one_time|date|after:start_date',
+            'availabilities.*.start_date' => 'required|date',
+            'availabilities.*.end_date' => 'nullable|date|after_or_equal:availabilities.*.start_date',
+            'availabilities.*.days_mask' => 'required|integer|min:1|max:127',
             'availabilities.*.start_time' => 'required|date_format:H:i',
-            'availabilities.*.end_time' => 'required|date_format:H:i|after:start_time'
+            'availabilities.*.end_time' => 'required|date_format:H:i|after:availabilities.*.start_time',
+            'availabilities.*.type' => 'required|in:preferred,available,unavailable'
         ]);
-
-        $result = $this->calendarService->updateEmployeeAvailability(
-            $request->user(),
-            $validated
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $result,
-            'message' => 'Availability updated successfully'
-        ]);
+        $result = $this->calendarService->updateAvailability($request->user(), $validated);
+        return response()->json(['success' => true, 'data' => $result, 'message' => 'Availability updated successfully']);
     }
 
     public function requestTimeOff(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'type' => 'required|in:vacation,sick,personal,bereavement,other',
+            'agency_id' => 'required|exists:agencies,id',
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
-            'start_time' => 'sometimes|date_format:H:i',
-            'end_time' => 'sometimes|date_format:H:i|after:start_time',
-            'reason' => 'sometimes|string|max:1000',
-            'attachments' => 'sometimes|array'
+            'type' => 'required|in:vacation,sick,personal,bereavement,other',
+            'reason' => 'sometimes|string|max:1000'
         ]);
-
-        $result = $this->calendarService->requestTimeOff(
-            $request->user(),
-            $validated
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $result,
-            'message' => 'Time off request submitted successfully'
-        ]);
+        $result = $this->calendarService->requestTimeOff($request->user(), $validated);
+        return response()->json(['success' => true, 'data' => $result, 'message' => 'Time off request submitted successfully']);
     }
 
-    public function bulkOfferShifts(Request $request): JsonResponse
+    public function approveTimeOff(Request $request, string $timeOffId): JsonResponse
     {
         $validated = $request->validate([
-            'shift_ids' => 'required|array',
-            'shift_ids.*' => 'exists:shifts,id',
-            'employee_ids' => 'required|array',
-            'employee_ids.*' => 'exists:employees,id',
-            'expires_at' => 'sometimes|date|after:now'
+            'status' => 'required|in:approved,rejected',
+            'notes' => 'sometimes|string|max:500'
         ]);
-
-        $result = $this->calendarService->bulkOfferShifts(
-            $request->user(),
-            $validated
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $result,
-            'message' => 'Shifts offered successfully'
-        ]);
+        $result = $this->calendarService->approveTimeOff($request->user(), $timeOffId, $validated);
+        return response()->json(['success' => true, 'data' => $result, 'message' => 'Time off request updated successfully']);
     }
 
-    public function bulkAssignShifts(Request $request): JsonResponse
+    public function checkShiftConflicts(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'shift_ids' => 'required|array',
-            'shift_ids.*' => 'exists:shifts,id',
-            'employee_ids' => 'required|array',
-            'employee_ids.*' => 'exists:employees,id'
+            'employee_id' => 'required|exists:employees,id',
+            'start_time' => 'required|date',
+            'end_time' => 'required|date|after:start_time'
         ]);
-
-        $result = $this->calendarService->bulkAssignShifts(
-            $request->user(),
-            $validated
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $result,
-            'message' => 'Shifts assigned successfully'
-        ]);
-    }
-
-    public function exportEvents(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'format' => 'sometimes|in:csv,excel,pdf',
-            'start_date' => 'sometimes|date',
-            'end_date' => 'sometimes|date|after_or_equal:start_date',
-            'filters' => 'sometimes|array'
-        ]);
-
-        $export = $this->calendarService->exportEvents(
-            $request->user(),
-            $validated
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $export,
-            'message' => 'Events exported successfully'
-        ]);
-    }
-
-    public function printSchedule(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'start_date' => 'sometimes|date',
-            'end_date' => 'sometimes|date|after_or_equal:start_date',
-            'view' => 'sometimes|in:week,month',
-            'include_unassigned' => 'sometimes|boolean'
-        ]);
-
-        $schedule = $this->calendarService->generatePrintableSchedule(
-            $request->user(),
-            $validated
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $schedule,
-            'message' => 'Schedule generated successfully'
-        ]);
+        $conflicts = $this->calendarService->checkShiftConflicts($validated);
+        return response()->json(['success' => true, 'data' => $conflicts, 'has_conflicts' => count($conflicts) > 0]);
     }
 }

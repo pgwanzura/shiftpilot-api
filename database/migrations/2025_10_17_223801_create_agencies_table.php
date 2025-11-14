@@ -12,15 +12,15 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('legal_name')->nullable();
-            $table->string('registration_number')->nullable();
-            $table->string('billing_email')->nullable();
+            $table->string('registration_number')->nullable()->unique();
+            $table->string('billing_email')->nullable()->unique();
             $table->string('phone')->nullable();
             $table->string('address_line1')->nullable();
             $table->string('address_line2')->nullable();
             $table->string('city')->nullable();
             $table->string('county')->nullable();
             $table->string('country', 2)->nullable()->default('GB');
-            $table->string('postcode')->nullable();   
+            $table->string('postcode')->nullable();
             $table->decimal('latitude', 10, 8)->nullable();
             $table->decimal('longitude', 11, 8)->nullable();
             $table->decimal('default_markup_percent', 5, 2)->default(15.00);
@@ -29,7 +29,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['subscription_status']);
-            $table->index(['created_at']);
+            $table->index(['country']);
         });
     }
 

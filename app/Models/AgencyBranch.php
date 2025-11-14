@@ -37,7 +37,6 @@ class AgencyBranch extends Model
     ];
 
     protected $casts = [
-        'is_head_office' => 'boolean',
         'status' => AgencyBranchStatus::class,
         'opening_hours' => 'array',
         'services_offered' => 'array',

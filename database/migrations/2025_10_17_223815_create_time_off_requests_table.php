@@ -21,10 +21,8 @@ return new class extends Migration
             $table->timestamp('approved_at')->nullable();
             $table->timestamps();
 
-            $table->index(['employee_id', 'agency_id', 'start_date', 'end_date']);
+            $table->index(['employee_id', 'start_date']);
             $table->index(['agency_id', 'status']);
-            $table->index(['status', 'start_date']);
-            $table->index(['type', 'status']);
         });
     }
 

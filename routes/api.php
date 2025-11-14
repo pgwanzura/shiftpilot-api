@@ -112,45 +112,28 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{preference}/matching-shifts', [EmployeePreferencesController::class, 'getMatchingShifts']);
     });
 
-    // Calendar Routes (existing)
-    Route::prefix('calendar')->group(function () {
-        // Main calendar events with enhanced filtering
-        Route::get('/events', [CalendarEventsController::class, 'index']);
 
-        // Quick access endpoints
+    Route::prefix('calendar-events')->group(function () {
+        Route::get('/', [CalendarEventsController::class, 'index']);
+        Route::get('/config', [CalendarEventsController::class, 'getCalendarConfig']);
+        Route::get('/filter-options', [CalendarEventsController::class, 'getFilterOptions']);
         Route::get('/upcoming-shifts', [CalendarEventsController::class, 'upcomingShifts']);
         Route::get('/pending-actions', [CalendarEventsController::class, 'pendingActions']);
-        Route::get('/urgent-shifts', [CalendarEventsController::class, 'urgentShifts']);
-
-        // Stats and analytics
-        Route::get('/stats', [CalendarEventsController::class, 'eventStats']);
+        Route::get('/availability-conflicts', [CalendarEventsController::class, 'availabilityConflicts']);
+        Route::get('/event-stats', [CalendarEventsController::class, 'eventStats']);
         Route::get('/workload-overview', [CalendarEventsController::class, 'workloadOverview']);
 
-        // Configuration and metadata
-        Route::get('/config', [CalendarEventsController::class, 'getConfig']);
-        Route::get('/filters/options', [CalendarEventsController::class, 'getFilterOptions']);
-
-        // Event actions
-        Route::post('/events/{event}/action', [CalendarEventsController::class, 'executeAction']);
-        Route::post('/shifts/{shift}/offer', [CalendarEventsController::class, 'offerShift']);
-        Route::post('/shifts/{shift}/assign', [CalendarEventsController::class, 'assignShift']);
-        Route::post('/shifts/{shift}/complete', [CalendarEventsController::class, 'completeShift']);
-        Route::post('/shifts/{shift}/approve', [CalendarEventsController::class, 'approveShift']);
-        Route::post('/shifts/{shift}/clock-in', [CalendarEventsController::class, 'clockIn']);
-        Route::post('/shifts/{shift}/clock-out', [CalendarEventsController::class, 'clockOut']);
-
-        // Availability management
-        Route::get('/availability', [CalendarEventsController::class, 'getAvailability']);
-        Route::post('/availability', [CalendarEventsController::class, 'updateAvailability']);
+        Route::post('/check-shift-conflicts', [CalendarEventsController::class, 'checkShiftConflicts']);
+        Route::post('/{eventType}/{eventId}/action', [CalendarEventsController::class, 'executeAction']);
+        Route::post('/shifts/{shiftId}/offer', [CalendarEventsController::class, 'offerShift']);
+        Route::post('/shift-offers/{offerId}/respond', [CalendarEventsController::class, 'respondToShiftOffer']);
+        Route::post('/shifts/{shiftId}/clock-in', [CalendarEventsController::class, 'clockIn']);
+        Route::post('/shifts/{shiftId}/clock-out', [CalendarEventsController::class, 'clockOut']);
+        Route::post('/timesheets/{timesheetId}/approve', [CalendarEventsController::class, 'approveTimesheet']);
         Route::post('/time-off', [CalendarEventsController::class, 'requestTimeOff']);
+        Route::post('/time-off/{timeOffId}/approve', [CalendarEventsController::class, 'approveTimeOff']);
 
-        // Bulk operations
-        Route::post('/shifts/bulk-offer', [CalendarEventsController::class, 'bulkOfferShifts']);
-        Route::post('/shifts/bulk-assign', [CalendarEventsController::class, 'bulkAssignShifts']);
-
-        // Export and reporting
-        Route::get('/export', [CalendarEventsController::class, 'exportEvents']);
-        Route::get('/schedule-print', [CalendarEventsController::class, 'printSchedule']);
+        Route::put('/availability', [CalendarEventsController::class, 'updateAvailability']);
     });
 
 

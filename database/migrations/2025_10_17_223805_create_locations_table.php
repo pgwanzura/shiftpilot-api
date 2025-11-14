@@ -28,11 +28,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['employer_id', 'name']);
-            $table->index(['postcode']);
-            $table->index(['city']);
-            $table->index(['country']);
-            $table->index(['latitude', 'longitude']);
-            $table->index(['location_type']);
+            $table->index(['country', 'city']);
         });
     }
 

@@ -5,35 +5,31 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 return new class() extends Migration {
-
     public function up()
     {
-        Schema::table('shift_templates', function (Blueprint $table) {
-            $table->dropForeign(['employer_id']);
-            $table->dropForeign(['location_id']);
-            $table->dropColumn(['employer_id', 'location_id', 'role_requirement', 'required_qualifications', 'hourly_rate', 'start_date', 'end_date', 'created_by_type', 'created_by_id']);
+        Schema::create('shift_templates', function (Blueprint $table) {
+            $table->id();
             $table->foreignId('assignment_id')->constrained()->onDelete('cascade');
+            $table->string('name');
+            $table->string('day_of_week');
+            $table->time('start_time');
+            $table->time('end_time');
+            $table->integer('break_minutes')->default(0);
+            $table->integer('required_employees')->default(1);
+            $table->json('recurrence_pattern')->nullable();
             $table->date('effective_start_date')->nullable();
             $table->date('effective_end_date')->nullable();
             $table->date('last_generated_date')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+
+            $table->index(['assignment_id', 'day_of_week']);
+            $table->index(['effective_start_date', 'effective_end_date']);
         });
     }
 
     public function down()
     {
-        Schema::table('shift_templates', function (Blueprint $table) {
-            $table->dropForeign(['assignment_id']);
-            $table->dropColumn(['assignment_id', 'effective_start_date', 'effective_end_date', 'last_generated_date']);
-
-            $table->foreignId('employer_id')->constrained()->onDelete('cascade');
-            $table->foreignId('location_id')->constrained()->onDelete('cascade');
-            $table->string('role_requirement')->nullable();
-            $table->json('required_qualifications')->nullable();
-            $table->decimal('hourly_rate', 8, 2);
-            $table->date('start_date')->nullable();
-            $table->date('end_date')->nullable();
-            $table->string('created_by_type');
-            $table->unsignedBigInteger('created_by_id');
-        });
+        Schema::dropIfExists('shift_templates');
     }
 };

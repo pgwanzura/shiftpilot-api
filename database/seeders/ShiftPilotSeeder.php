@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\EmployeeAvailability;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -10,18 +9,6 @@ use Carbon\Carbon;
 
 class ShiftPilotSeeder extends Seeder
 {
-    private array $industries = [
-        'Healthcare',
-        'Retail',
-        'Logistics',
-        'Technology',
-        'Hospitality',
-        'Manufacturing',
-        'Education',
-        'Construction',
-        'Finance',
-        'Government'
-    ];
 
     private array $positions = [
         'Registered Nurse',
@@ -65,14 +52,6 @@ class ShiftPilotSeeder extends Seeder
         ['name' => 'Safeguarding Adults', 'level' => 'Level 2']
     ];
 
-    private array $locations = [
-        'London' => ['Central London', 'East London', 'West London', 'North London', 'South London'],
-        'Manchester' => ['City Centre', 'Salford Quays', 'Trafford', 'Stockport'],
-        'Birmingham' => ['City Centre', 'Jewellery Quarter', 'Digbeth', 'Edgbaston'],
-        'Leeds' => ['City Centre', 'Headingley', 'Roundhay', 'Horsforth'],
-        'Glasgow' => ['City Centre', 'West End', 'Merchant City', 'Finnieston']
-    ];
-
     public function run()
     {
         DB::statement('SET FOREIGN_KEY_CHECKS=0');
@@ -85,7 +64,7 @@ class ShiftPilotSeeder extends Seeder
         $this->createContacts();
         $this->createLocations();
         $this->createEmployees();
-        $this->createPlacements();
+        $this->createAgencyEmployees();
         $this->createEmployeeAvailabilities();
         $this->createTimeOffRequests();
         $this->createShiftTemplates();
@@ -98,9 +77,6 @@ class ShiftPilotSeeder extends Seeder
         $this->createPayrolls();
         $this->createPayouts();
         $this->createSubscriptions();
-        $this->createPlatformBilling();
-        $this->createRateCards();
-        $this->createNotifications();
 
         DB::statement('SET FOREIGN_KEY_CHECKS=1');
     }
@@ -110,6 +86,7 @@ class ShiftPilotSeeder extends Seeder
         $users = [];
         $now = Carbon::now();
 
+        // Super Admin
         $users[] = [
             'name' => 'System Administrator',
             'email' => 'admin@shiftpilot.com',
@@ -123,6 +100,7 @@ class ShiftPilotSeeder extends Seeder
             'updated_at' => $now,
         ];
 
+        // Agency Admins
         $agencyNames = ['Elite Staffing', 'Prime Workforce', 'Talent Connect', 'Professional Recruiters', 'Skilled Labor Partners'];
         foreach ($agencyNames as $index => $name) {
             $users[] = [
@@ -139,6 +117,7 @@ class ShiftPilotSeeder extends Seeder
             ];
         }
 
+        // Agents
         for ($i = 1; $i <= 15; $i++) {
             $agencyId = ceil($i / 3);
             $users[] = [
@@ -155,6 +134,7 @@ class ShiftPilotSeeder extends Seeder
             ];
         }
 
+        // Employer Admins
         $employerNames = [
             'St. Mary\'s Hospital NHS Trust',
             'Metro Retail Group PLC',
@@ -181,6 +161,7 @@ class ShiftPilotSeeder extends Seeder
             ];
         }
 
+        // Contacts
         $contactCount = 1;
         for ($employerId = 1; $employerId <= 8; $employerId++) {
             $numContacts = rand(2, 4);
@@ -201,6 +182,7 @@ class ShiftPilotSeeder extends Seeder
             }
         }
 
+        // Employees
         for ($i = 1; $i <= 100; $i++) {
             $firstName = $this->generateFirstName();
             $lastName = $this->generateLastName();
@@ -237,15 +219,16 @@ class ShiftPilotSeeder extends Seeder
 
         foreach ($agencyData as $index => $data) {
             $agencies[] = [
-                'user_id' => $index + 2,
                 'name' => $data[0],
                 'legal_name' => $data[0],
                 'registration_number' => $data[1],
                 'billing_email' => 'accounts@' . strtolower(str_replace([' ', 'Ltd', 'PLC', 'Limited'], '', $data[0])) . '.com',
-                'address' => ($index + 1) . ' Business Park, London E1 6AN',
+                'phone' => '+4416329600' . (10 + $index),
+                'address_line1' => ($index + 1) . ' Business Park',
                 'city' => 'London',
+                'postcode' => 'E1 6AN',
                 'country' => 'GB',
-                'commission_rate' => $data[2],
+                'default_markup_percent' => $data[2],
                 'subscription_status' => 'active',
                 'meta' => json_encode([
                     'business_hours' => ['start' => '08:30', 'end' => '17:30'],
@@ -290,17 +273,20 @@ class ShiftPilotSeeder extends Seeder
 
         foreach ($employerData as $index => $data) {
             $employers[] = [
-                'user_id' => 21 + $index,
                 'name' => $data[0],
+                'legal_name' => $data[0],
                 'billing_email' => 'finance@' . strtolower(str_replace([' ', '\'', 'PLC', 'Ltd', 'Trust', 'Group', 'Co'], '', $data[0])) . '.com',
-                'address' => rand(1, 100) . ' ' . $data[2] . ' Road, ' . $data[2],
+                'phone' => '+441632980' . str_pad($index + 1, 2, '0', STR_PAD_LEFT),
+                'address_line1' => rand(1, 100) . ' ' . $data[2] . ' Road',
                 'city' => $data[2],
+                'postcode' => $this->generatePostcode($data[2]),
                 'country' => 'GB',
-                'subscription_status' => 'active',
+                'industry' => $data[1],
+                'company_size' => ['1-50', '51-200', '201-500', '501-1000', '1000+'][array_rand([0, 1, 2, 3, 4])],
+                'status' => 'active',
                 'meta' => json_encode([
-                    'industry' => $data[1],
-                    'company_size' => rand(50, 5000),
-                    'established' => rand(1990, 2015)
+                    'established' => rand(1990, 2015),
+                    'website' => 'https://' . strtolower(str_replace([' ', '\'', 'PLC', 'Ltd', 'Trust'], '', $data[0])) . '.com'
                 ]),
                 'created_at' => $now->copy()->subMonths(rand(12, 36)),
                 'updated_at' => $now,
@@ -309,6 +295,20 @@ class ShiftPilotSeeder extends Seeder
 
         DB::table('employers')->insert($employers);
         $this->command->info('Created ' . count($employers) . ' employers');
+    }
+
+    private function generatePostcode($city)
+    {
+        $prefixes = [
+            'London' => ['E1', 'W1', 'SW1', 'NW1', 'SE1'],
+            'Manchester' => ['M1', 'M2', 'M3', 'M4'],
+            'Birmingham' => ['B1', 'B2', 'B3', 'B4'],
+            'Glasgow' => ['G1', 'G2', 'G3', 'G4'],
+            'Leeds' => ['LS1', 'LS2', 'LS3', 'LS4']
+        ];
+
+        $prefix = $prefixes[$city][array_rand($prefixes[$city])] ?? 'AB1';
+        return $prefix . ' ' . rand(1, 9) . 'AB';
     }
 
     private function createEmployerAgencyLinks()
@@ -365,9 +365,6 @@ class ShiftPilotSeeder extends Seeder
             $agents[] = [
                 'user_id' => 7 + $i,
                 'agency_id' => $agencyId,
-                'name' => 'Agent ' . $i,
-                'email' => 'agent' . $i . '@agency' . $agencyId . '.com',
-                'phone' => '+441632970' . str_pad($i, 3, '0', STR_PAD_LEFT),
                 'permissions' => json_encode(['shift_management', 'employee_management', 'timesheet_approval']),
                 'created_at' => $now->copy()->subMonths(rand(3, 12)),
                 'updated_at' => $now,
@@ -392,11 +389,9 @@ class ShiftPilotSeeder extends Seeder
                 $contacts[] = [
                     'employer_id' => $employerId,
                     'user_id' => $contactUserId++,
-                    'name' => 'Contact ' . $employerId . '-' . ($j + 1),
-                    'email' => strtolower(str_replace(' ', '.', $roles[$j])) . $employerId . '@employer' . $employerId . '.com',
-                    'phone' => '+44163299' . str_pad($employerId * 10 + $j, 3, '0', STR_PAD_LEFT),
                     'role' => $j === 0 ? 'manager' : ($j === 1 ? 'approver' : 'supervisor'),
-                    'can_sign_timesheets' => $j !== 3,
+                    'can_approve_timesheets' => $j !== 3,
+                    'can_approve_assignments' => $j === 0,
                     'meta' => json_encode(['department' => $roles[$j]]),
                     'created_at' => $now->copy()->subMonths(rand(4, 12)),
                     'updated_at' => $now,
@@ -430,12 +425,18 @@ class ShiftPilotSeeder extends Seeder
                 $locations[] = [
                     'employer_id' => $employerId,
                     'name' => $name,
-                    'address' => ($index + 1) . ' ' . $city . ' Road, ' . $city,
+                    'address_line1' => ($index + 1) . ' ' . $city . ' Road',
+                    'city' => $city,
+                    'postcode' => $this->generatePostcode($city),
+                    'country' => 'GB',
                     'latitude' => 51.5074 + (rand(-500, 500) / 10000),
                     'longitude' => -0.1278 + (rand(-500, 500) / 10000),
+                    'location_type' => $this->getLocationType($name),
+                    'contact_name' => 'Manager ' . $employerId . '-' . ($index + 1),
+                    'contact_phone' => '+44163299' . str_pad($employerId * 10 + $index, 3, '0', STR_PAD_LEFT),
+                    'instructions' => 'Report to main reception',
                     'meta' => json_encode([
                         'facilities' => ['parking', 'canteen', 'changing_rooms'],
-                        'site_manager' => 'Manager ' . $employerId . '-' . ($index + 1)
                     ]),
                     'created_at' => $now->copy()->subMonths(rand(6, 24)),
                     'updated_at' => $now,
@@ -453,9 +454,54 @@ class ShiftPilotSeeder extends Seeder
         return $cities[$employerId - 1] ?? 'London';
     }
 
+    private function getLocationType($name)
+    {
+        if (str_contains($name, 'Hospital') || str_contains($name, 'Clinic')) return 'healthcare';
+        if (str_contains($name, 'Store') || str_contains($name, 'Retail')) return 'retail';
+        if (str_contains($name, 'Depot') || str_contains($name, 'Warehouse')) return 'warehouse';
+        if (str_contains($name, 'Office') || str_contains($name, 'Campus')) return 'office';
+        if (str_contains($name, 'Hotel') || str_contains($name, 'Restaurant')) return 'hospitality';
+        if (str_contains($name, 'Plant') || str_contains($name, 'Facility')) return 'manufacturing';
+        if (str_contains($name, 'School') || str_contains($name, 'Campus')) return 'education';
+        if (str_contains($name, 'Construction')) return 'construction';
+        return 'other';
+    }
+
     private function createEmployees()
     {
         $employees = [];
+        $now = Carbon::now();
+
+        for ($i = 1; $i <= 100; $i++) {
+            $employees[] = [
+                'user_id' => 61 + $i,
+                'national_insurance_number' => 'AB' . rand(10, 99) . ' ' . rand(10, 99) . ' ' . rand(10, 99) . ' ' . rand(10, 99),
+                'date_of_birth' => $now->copy()->subYears(rand(18, 65))->subMonths(rand(0, 11))->format('Y-m-d'),
+                'address_line1' => rand(1, 100) . ' Main Street',
+                'city' => ['London', 'Manchester', 'Birmingham', 'Leeds', 'Glasgow'][array_rand([0, 1, 2, 3, 4])],
+                'postcode' => $this->generatePostcode('London'),
+                'country' => 'GB',
+                'emergency_contact_name' => $this->generateFirstName() . ' ' . $this->generateLastName(),
+                'emergency_contact_phone' => '+447' . rand(500000000, 799999999),
+                'qualifications' => json_encode($this->getRandomQualifications()),
+                'certifications' => json_encode($this->getRandomCertifications()),
+                'status' => rand(0, 10) > 1 ? 'active' : 'inactive',
+                'meta' => json_encode([
+                    'preferred_shift_types' => ['day', 'evening', 'night'][array_rand([0, 1, 2])],
+                    'max_travel_distance' => rand(10, 50)
+                ]),
+                'created_at' => $now->copy()->subMonths(rand(1, 24)),
+                'updated_at' => $now,
+            ];
+        }
+
+        DB::table('employees')->insert($employees);
+        $this->command->info('Created ' . count($employees) . ' employees');
+    }
+
+    private function createAgencyEmployees()
+    {
+        $agencyEmployees = [];
         $now = Carbon::now();
 
         $positionRates = [
@@ -473,39 +519,38 @@ class ShiftPilotSeeder extends Seeder
             'Commercial Cleaner' => [9.00, 11.50]
         ];
 
-        for ($i = 1; $i <= 100; $i++) {
-            $position = $this->positions[array_rand($this->positions)];
-            $rateRange = $positionRates[$position] ?? [10.00, 15.00];
-            $payRate = round(rand($rateRange[0] * 100, $rateRange[1] * 100) / 100, 2);
+        for ($employeeId = 1; $employeeId <= 100; $employeeId++) {
+            $numAgencies = rand(1, 3);
+            $agencyIds = array_rand(range(1, 5), $numAgencies);
+            if (!is_array($agencyIds)) $agencyIds = [$agencyIds];
 
-            $agencyId = rand(1, 5);
-            $employmentType = $this->getEmploymentType($position);
+            foreach ($agencyIds as $agencyId) {
+                $position = $this->positions[array_rand($this->positions)];
+                $rateRange = $positionRates[$position] ?? [10.00, 15.00];
+                $payRate = round(rand($rateRange[0] * 100, $rateRange[1] * 100) / 100, 2);
 
-            $employees[] = [
-                'user_id' => 61 + $i,
-                'agency_id' => $agencyId,
-                'employer_id' => rand(0, 10) > 7 ? $this->getCompatibleEmployer($position) : null,
-                'position' => $position,
-                'pay_rate' => $payRate,
-                'availability' => json_encode([
-                    'preferred_hours' => rand(20, 40),
-                    'notice_period' => rand(1, 14) . ' days',
-                    'travel_distance' => rand(10, 50)
-                ]),
-                'qualifications' => json_encode($this->getRelevantQualifications($position)),
-                'employment_type' => $employmentType,
-                'status' => rand(0, 10) > 1 ? 'active' : 'inactive',
-                'meta' => json_encode([
-                    'emergency_contact' => $this->generateFirstName() . ' ' . $this->generateLastName(),
-                    'national_insurance' => 'AB' . rand(10, 99) . ' ' . rand(10, 99) . ' ' . rand(10, 99) . ' ' . rand(10, 99) . ' ' . rand(10, 99)
-                ]),
-                'created_at' => $now->copy()->subMonths(rand(1, 24)),
-                'updated_at' => $now,
-            ];
+                $agencyEmployees[] = [
+                    'agency_id' => $agencyId + 1,
+                    'employee_id' => $employeeId,
+                    'position' => $position,
+                    'pay_rate' => $payRate,
+                    'employment_type' => $this->getEmploymentType($position),
+                    'status' => 'active',
+                    'contract_start_date' => $now->copy()->subMonths(rand(1, 12))->format('Y-m-d'),
+                    'specializations' => json_encode($this->getRelevantSpecializations($position)),
+                    'max_weekly_hours' => rand(20, 48),
+                    'meta' => json_encode([
+                        'preferred_locations' => $this->getPreferredLocations(),
+                        'skills' => $this->getRelevantSkills($position)
+                    ]),
+                    'created_at' => $now->copy()->subMonths(rand(1, 12)),
+                    'updated_at' => $now,
+                ];
+            }
         }
 
-        DB::table('employees')->insert($employees);
-        $this->command->info('Created ' . count($employees) . ' employees');
+        DB::table('agency_employees')->insert($agencyEmployees);
+        $this->command->info('Created ' . count($agencyEmployees) . ' agency-employee relationships');
     }
 
     private function getEmploymentType($position)
@@ -516,155 +561,59 @@ class ShiftPilotSeeder extends Seeder
         return ['temp', 'temp', 'temp', 'part_time'][array_rand([0, 1, 2, 3])];
     }
 
-    private function getCompatibleEmployer($position)
+    private function getRelevantSpecializations($position)
     {
-        if (str_contains($position, 'Nurse') || str_contains($position, 'Care')) return 1;
-        if (str_contains($position, 'Chef') || str_contains($position, 'Cook')) return 5;
-        if (str_contains($position, 'Driver')) return 3;
-        if (str_contains($position, 'Warehouse')) return 6;
-        if (str_contains($position, 'Retail')) return 2;
-        if (str_contains($position, 'Security')) return rand(1, 8);
-        return rand(1, 8);
+        if (str_contains($position, 'Nurse')) return ['Acute Care', 'Medical Ward', 'Surgical'];
+        if (str_contains($position, 'Care')) return ['Elderly Care', 'Dementia', 'Personal Care'];
+        if (str_contains($position, 'Chef')) return ['Fine Dining', 'Banquets', 'A La Carte'];
+        if (str_contains($position, 'Driver')) return ['Long Haul', 'Local Delivery', 'Refrigerated'];
+        if (str_contains($position, 'Warehouse')) return ['Picking', 'Packing', 'Inventory'];
+        return ['General'];
     }
 
-    private function getRelevantQualifications($position)
+    private function getPreferredLocations()
     {
-        $qualifications = [];
+        $locations = ['Central London', 'East London', 'West London', 'Manchester City Centre', 'Birmingham'];
+        return array_rand($locations, rand(1, 3));
+    }
 
+    private function getRelevantSkills($position)
+    {
+        $skills = [];
         if (str_contains($position, 'Nurse') || str_contains($position, 'Care')) {
-            $qualifications[] = $this->qualifications[0]; // First Aid
-            $qualifications[] = $this->qualifications[5]; // Patient Care
+            $skills = ['Patient Care', 'Medication Administration', 'Wound Care'];
+        } elseif (str_contains($position, 'Chef') || str_contains($position, 'Cook')) {
+            $skills = ['Food Preparation', 'Menu Planning', 'Kitchen Management'];
+        } elseif (str_contains($position, 'Driver')) {
+            $skills = ['Route Planning', 'Vehicle Maintenance', 'Customer Service'];
+        } else {
+            $skills = ['Teamwork', 'Communication', 'Problem Solving'];
         }
-
-        if (str_contains($position, 'Chef') || str_contains($position, 'Cook')) {
-            $qualifications[] = $this->qualifications[1]; // Food Hygiene
-        }
-
-        if (str_contains($position, 'Driver')) {
-            $qualifications[] = $this->qualifications[6]; // HGV License
-        }
-
-        if (str_contains($position, 'Warehouse')) {
-            $qualifications[] = $this->qualifications[7]; // Forklift License
-        }
-
-        if (str_contains($position, 'Security')) {
-            $qualifications[] = $this->qualifications[3]; // SIA License
-        }
-
-        // Add 1-2 random additional qualifications
-        $additional = array_rand($this->qualifications, rand(1, 2));
-        if (!is_array($additional)) $additional = [$additional];
-
-        foreach ($additional as $index) {
-            if (!in_array($this->qualifications[$index], $qualifications)) {
-                $qualifications[] = $this->qualifications[$index];
-            }
-        }
-
-        return array_slice($qualifications, 0, rand(2, 4));
+        return array_slice($skills, 0, rand(2, 4));
     }
 
-    private function createPlacements()
+    private function getRandomQualifications()
     {
-        $placements = [];
-        $now = Carbon::now();
+        $count = rand(2, 5);
+        $selected = array_rand($this->qualifications, $count);
+        if (!is_array($selected)) $selected = [$selected];
 
-        $placementTemplates = [
-            [
-                'title' => 'Registered Nurse - Acute Ward',
-                'description' => 'Experienced registered nurse required for acute medical ward. Must have recent NHS experience and valid NMC pin.',
-                'budget_range' => [28.00, 35.00],
-                'industry' => 'Healthcare'
-            ],
-            [
-                'title' => 'HGV Class 1 Driver',
-                'description' => 'Class 1 HGV driver for trunking operations. Night shifts, must have valid CPC and digital tachograph card.',
-                'budget_range' => [16.00, 22.00],
-                'industry' => 'Logistics'
-            ],
-            [
-                'title' => 'Sous Chef - Fine Dining',
-                'description' => 'Experienced sous chef for high-end restaurant. Must have fine dining experience and creative menu development skills.',
-                'budget_range' => [20.00, 26.00],
-                'industry' => 'Hospitality'
-            ],
-            [
-                'title' => 'Warehouse Team Leader',
-                'description' => 'Team leader for busy distribution centre. Supervisory experience required, must be forklift certified.',
-                'budget_range' => [13.00, 17.00],
-                'industry' => 'Logistics'
-            ],
-            [
-                'title' => 'Retail Supervisor',
-                'description' => 'Supervisor for fashion retail store. Customer service focused with team management experience.',
-                'budget_range' => [11.00, 14.50],
-                'industry' => 'Retail'
-            ]
-        ];
-
-        for ($i = 1; $i <= 100; $i++) {
-            $template = $placementTemplates[array_rand($placementTemplates)];
-            $employerId = $this->getEmployerForIndustry($template['industry']);
-            $locationId = DB::table('locations')
-                ->where('employer_id', $employerId)
-                ->inRandomOrder()
-                ->value('id');
-
-            $startDate = $now->copy()->addDays(rand(7, 60));
-            $duration = rand(30, 180);
-            $endDate = $startDate->copy()->addDays($duration);
-
-            $budget = round(rand($template['budget_range'][0] * 100, $template['budget_range'][1] * 100) / 100, 2);
-
-            $placements[] = [
-                'employer_id' => $employerId,
-                'title' => $template['title'] . ' #' . $i,
-                'description' => $template['description'],
-                'role_requirements' => json_encode(['experience' => '2+ years', 'availability' => 'Immediate']),
-                'required_qualifications' => json_encode($this->getRelevantQualifications($template['title'])),
-                'experience_level' => ['entry', 'intermediate', 'senior'][array_rand([0, 1, 2])],
-                'background_check_required' => rand(0, 10) > 3,
-                'location_id' => $locationId,
-                'location_instructions' => 'Report to main reception and ask for the hiring manager',
-                'start_date' => $startDate->format('Y-m-d'),
-                'end_date' => $endDate->format('Y-m-d'),
-                'shift_pattern' => ['one_time', 'recurring', 'ongoing'][array_rand([0, 1, 2])],
-                'recurrence_rules' => json_encode(['type' => 'weekly', 'days' => ['mon', 'tue', 'wed', 'thu', 'fri']]),
-                'budget_type' => 'hourly',
-                'budget_amount' => $budget,
-                'currency' => 'GBP',
-                'overtime_rules' => json_encode(['rate' => '1.5x after 40 hours', 'double_time' => 'Sundays']),
-                'target_agencies' => 'all',
-                'specific_agency_ids' => null,
-                'response_deadline' => $now->copy()->addDays(rand(7, 21)),
-                'status' => ['draft', 'active', 'active', 'filled', 'cancelled'][array_rand([0, 1, 1, 2, 3])],
-                'selected_agency_id' => rand(0, 10) > 3 ? rand(1, 5) : null,
-                'selected_employee_id' => rand(0, 10) > 5 ? rand(1, 100) : null,
-                'agreed_rate' => rand(0, 10) > 3 ? $budget * 0.85 : null,
-                'created_by_id' => 21 + ($employerId - 1),
-                'created_at' => $now->copy()->subDays(rand(1, 30)),
-                'updated_at' => $now,
-            ];
+        $result = [];
+        foreach ($selected as $index) {
+            $result[] = $this->qualifications[$index];
         }
-
-        DB::table('placements')->insert($placements);
-        $this->command->info('Created ' . count($placements) . ' placements');
+        return $result;
     }
 
-    private function getEmployerForIndustry($industry)
+    private function getRandomCertifications()
     {
-        $industryMap = [
-            'Healthcare' => 1,
-            'Retail' => 2,
-            'Logistics' => 3,
-            'Technology' => 4,
-            'Hospitality' => 5,
-            'Manufacturing' => 6,
-            'Education' => 7,
-            'Construction' => 8
+        $certifications = [
+            ['name' => 'Health and Safety Certificate', 'issued' => '2023-01-15'],
+            ['name' => 'Manual Handling Training', 'issued' => '2023-03-20'],
+            ['name' => 'Fire Safety Training', 'issued' => '2023-05-10'],
+            ['name' => 'Customer Service Excellence', 'issued' => '2023-07-05'],
         ];
-        return $industryMap[$industry] ?? rand(1, 8);
+        return array_slice($certifications, 0, rand(1, 3));
     }
 
     private function createEmployeeAvailabilities()
@@ -673,15 +622,14 @@ class ShiftPilotSeeder extends Seeder
         $now = Carbon::now();
 
         $patterns = [
-            ['days' => EmployeeAvailability::WEEKDAYS, 'start' => '09:00', 'end' => '17:00', 'type' => 'preferred'],
-            ['days' => EmployeeAvailability::WEEKDAYS, 'start' => '17:00', 'end' => '22:00', 'type' => 'available'],
-            ['days' => EmployeeAvailability::WEEKENDS, 'start' => '08:00', 'end' => '16:00', 'type' => 'available'],
-            ['days' => EmployeeAvailability::ALL_WEEK, 'start' => '06:00', 'end' => '18:00', 'type' => 'available'],
-            ['days' => EmployeeAvailability::MONDAY + EmployeeAvailability::WEDNESDAY + EmployeeAvailability::FRIDAY, 'start' => '10:00', 'end' => '15:00', 'type' => 'preferred']
+            ['days' => 31, 'start' => '09:00', 'end' => '17:00', 'type' => 'preferred'], // Weekdays
+            ['days' => 31, 'start' => '17:00', 'end' => '22:00', 'type' => 'available'], // Weekdays evening
+            ['days' => 96, 'start' => '08:00', 'end' => '16:00', 'type' => 'available'], // Weekends
+            ['days' => 127, 'start' => '06:00', 'end' => '18:00', 'type' => 'available'], // All week
         ];
 
         for ($employeeId = 1; $employeeId <= 100; $employeeId++) {
-            $numPatterns = rand(1, 3);
+            $numPatterns = rand(1, 2);
             $selectedPatterns = array_rand($patterns, $numPatterns);
             if (!is_array($selectedPatterns)) $selectedPatterns = [$selectedPatterns];
 
@@ -706,9 +654,8 @@ class ShiftPilotSeeder extends Seeder
             }
         }
 
-        foreach (array_chunk($availabilities, 100) as $chunk) {
-            DB::table('employee_availabilities')->insert($chunk);
-        }
+        DB::table('employee_availabilities')->insert($availabilities);
+        $this->command->info('Created ' . count($availabilities) . ' employee availabilities');
     }
 
     private function createTimeOffRequests()
@@ -718,6 +665,11 @@ class ShiftPilotSeeder extends Seeder
 
         for ($i = 1; $i <= 50; $i++) {
             $employeeId = rand(1, 100);
+            $agencyId = DB::table('agency_employees')
+                ->where('employee_id', $employeeId)
+                ->inRandomOrder()
+                ->value('agency_id');
+
             $type = ['vacation', 'sick', 'personal', 'bereavement'][array_rand([0, 1, 2, 3])];
             $startDate = $now->copy()->addDays(rand(10, 180));
             $duration = $type === 'sick' ? rand(1, 5) : rand(3, 14);
@@ -725,11 +677,12 @@ class ShiftPilotSeeder extends Seeder
 
             $requests[] = [
                 'employee_id' => $employeeId,
-                'type' => $type,
+                'agency_id' => $agencyId,
                 'start_date' => $startDate->format('Y-m-d'),
                 'end_date' => $endDate->format('Y-m-d'),
-                'status' => $this->getTimeOffStatus($type),
+                'type' => $type,
                 'reason' => $this->getTimeOffReason($type),
+                'status' => $this->getTimeOffStatus($type),
                 'approved_by_id' => $type !== 'sick' && rand(0, 10) > 3 ? rand(2, 6) : null,
                 'approved_at' => $type !== 'sick' && rand(0, 10) > 3 ? $now->copy()->subDays(rand(1, 10)) : null,
                 'created_at' => $now->copy()->subDays(rand(5, 30)),
@@ -763,45 +716,41 @@ class ShiftPilotSeeder extends Seeder
     {
         $templates = [];
         $now = Carbon::now();
-        $days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+        // Get some agency employees to assign templates to
+        $agencyEmployees = DB::table('agency_employees')
+            ->where('status', 'active')
+            ->limit(20)
+            ->get();
 
         $templateData = [
-            ['Early Nursing Shift', '06:00', '14:00', 25.50],
-            ['Late Nursing Shift', '14:00', '22:00', 27.50],
-            ['Night Nursing Shift', '22:00', '06:00', 30.00],
-            ['Warehouse Morning', '08:00', '16:00', 11.50],
-            ['Warehouse Afternoon', '16:00', '00:00', 12.50],
-            ['Retail Day', '09:00', '17:00', 10.50],
-            ['Retail Evening', '13:00', '21:00', 11.00],
-            ['Security Day', '08:00', '20:00', 12.00],
-            ['Security Night', '20:00', '08:00', 14.00]
+            ['Early Nursing Shift', '06:00', '14:00'],
+            ['Late Nursing Shift', '14:00', '22:00'],
+            ['Night Nursing Shift', '22:00', '06:00'],
+            ['Warehouse Morning', '08:00', '16:00'],
+            ['Warehouse Afternoon', '16:00', '00:00'],
+            ['Retail Day', '09:00', '17:00'],
+            ['Retail Evening', '13:00', '21:00'],
+            ['Security Day', '08:00', '20:00'],
+            ['Security Night', '20:00', '08:00']
         ];
 
-        foreach ($templateData as $template) {
-            $employerId = $this->getEmployerForShift($template[0]);
-            $locationId = DB::table('locations')
-                ->where('employer_id', $employerId)
-                ->inRandomOrder()
-                ->value('id');
+        foreach ($agencyEmployees as $agencyEmployee) {
+            $template = $templateData[array_rand($templateData)];
 
             $templates[] = [
-                'employer_id' => $employerId,
-                'location_id' => $locationId,
-                'title' => $template[0],
-                'description' => 'Regular scheduled shift',
-                'day_of_week' => $days[array_rand($days)],
+                'assignment_id' => $this->getAssignmentForAgencyEmployee($agencyEmployee->id),
+                'name' => $template[0],
+                'day_of_week' => ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][array_rand([0, 1, 2, 3, 4, 5, 6])],
                 'start_time' => $template[1],
                 'end_time' => $template[2],
-                'role_requirement' => $this->getRoleFromShift($template[0]),
-                'required_qualifications' => json_encode($this->getRelevantQualifications($template[0])),
-                'hourly_rate' => $template[3],
-                'recurrence_type' => 'weekly',
-                'status' => 'active',
-                'start_date' => $now->copy()->subMonths(3)->format('Y-m-d'),
-                'end_date' => $now->copy()->addMonths(6)->format('Y-m-d'),
-                'created_by_type' => 'employer',
-                'created_by_id' => 21 + ($employerId - 1),
-                'meta' => json_encode(['auto_fill' => true]),
+                'break_minutes' => 30,
+                'required_employees' => 1,
+                'recurrence_pattern' => json_encode(['type' => 'weekly', 'interval' => 1]),
+                'effective_start_date' => $now->copy()->subMonths(3)->format('Y-m-d'),
+                'effective_end_date' => $now->copy()->addMonths(6)->format('Y-m-d'),
+                'last_generated_date' => $now->copy()->subDays(rand(1, 7))->format('Y-m-d'),
+                'notes' => 'Regular scheduled shift template',
                 'created_at' => $now->copy()->subMonths(6),
                 'updated_at' => $now,
             ];
@@ -811,22 +760,9 @@ class ShiftPilotSeeder extends Seeder
         $this->command->info('Created ' . count($templates) . ' shift templates');
     }
 
-    private function getEmployerForShift($shiftTitle)
+    private function getAssignmentForAgencyEmployee($agencyEmployeeId)
     {
-        if (str_contains($shiftTitle, 'Nursing')) return 1;
-        if (str_contains($shiftTitle, 'Warehouse')) return 6;
-        if (str_contains($shiftTitle, 'Retail')) return 2;
-        if (str_contains($shiftTitle, 'Security')) return rand(1, 8);
-        return rand(1, 8);
-    }
-
-    private function getRoleFromShift($shiftTitle)
-    {
-        if (str_contains($shiftTitle, 'Nursing')) return 'Registered Nurse';
-        if (str_contains($shiftTitle, 'Warehouse')) return 'Warehouse Operative';
-        if (str_contains($shiftTitle, 'Retail')) return 'Retail Assistant';
-        if (str_contains($shiftTitle, 'Security')) return 'Security Officer';
-        return 'General Worker';
+        return 1;
     }
 
     private function createShifts()
@@ -834,62 +770,51 @@ class ShiftPilotSeeder extends Seeder
         $shifts = [];
         $now = Carbon::now();
 
-        for ($i = 1; $i <= 200; $i++) {
-            $employerId = rand(1, 8);
-            $agencyId = rand(1, 5);
-            $locationId = DB::table('locations')
-                ->where('employer_id', $employerId)
-                ->inRandomOrder()
-                ->value('id');
+        $agencyEmployees = DB::table('agency_employees')
+            ->where('status', 'active')
+            ->limit(50)
+            ->get();
 
-            $isPast = rand(0, 10) > 3;
-            $baseDate = $isPast ?
-                $now->copy()->subDays(rand(1, 90)) :
-                $now->copy()->addDays(rand(1, 60));
+        foreach ($agencyEmployees as $agencyEmployee) {
+            $numShifts = rand(1, 4);
 
-            $startTime = $baseDate->copy()
-                ->setHour(rand(6, 10))
-                ->setMinute(0);
-            $endTime = $startTime->copy()->addHours(rand(4, 12));
+            for ($i = 1; $i <= $numShifts; $i++) {
+                $isPast = rand(0, 10) > 3;
+                $baseDate = $isPast ?
+                    $now->copy()->subDays(rand(1, 90)) :
+                    $now->copy()->addDays(rand(1, 60));
 
-            $employeeId = $isPast && rand(0, 10) > 2 ? rand(1, 100) : null;
-            $placementId = $employeeId ? DB::table('placements')
-                ->where('selected_employee_id', $employeeId)
-                ->value('id') : null;
+                $startTime = $baseDate->copy()
+                    ->setHour(rand(6, 10))
+                    ->setMinute(0);
+                $endTime = $startTime->copy()->addHours(rand(4, 12));
 
-            $shifts[] = [
-                'employer_id' => $employerId,
-                'agency_id' => $agencyId,
-                'placement_id' => $placementId,
-                'employee_id' => $employeeId,
-                'agent_id' => rand(1, 15),
-                'location_id' => $locationId,
-                'start_time' => $startTime,
-                'end_time' => $endTime,
-                'hourly_rate' => rand(1000, 3000) / 100,
-                'status' => $this->getShiftStatus($startTime, $employeeId),
-                'created_by_type' => rand(0, 1) ? 'employer' : 'agency',
-                'created_by_id' => rand(0, 1) ? 21 + ($employerId - 1) : rand(8, 22),
-                'meta' => json_encode(['notes' => 'Scheduled shift']),
-                'notes' => $this->getShiftNotes(),
-                'created_at' => $startTime->copy()->subDays(rand(1, 14)),
-                'updated_at' => $now,
-            ];
+                $shifts[] = [
+                    'assignment_id' => $this->getAssignmentForAgencyEmployee($agencyEmployee->id),
+                    'shift_date' => $baseDate->format('Y-m-d'),
+                    'start_time' => $startTime,
+                    'end_time' => $endTime,
+                    'hourly_rate' => $agencyEmployee->pay_rate,
+                    'status' => $this->getShiftStatus($startTime),
+                    'notes' => $this->getShiftNotes(),
+                    'meta' => json_encode(['created_via' => 'seeder']),
+                    'created_at' => $startTime->copy()->subDays(rand(1, 14)),
+                    'updated_at' => $now,
+                ];
+            }
         }
 
         DB::table('shifts')->insert($shifts);
         $this->command->info('Created ' . count($shifts) . ' shifts');
     }
 
-    private function getShiftStatus($startTime, $employeeId)
+    private function getShiftStatus($startTime)
     {
         $now = Carbon::now();
         if ($startTime->gt($now)) {
-            return $employeeId ? 'assigned' : (rand(0, 10) > 6 ? 'offered' : 'open');
+            return 'scheduled';
         } else {
-            return $employeeId ?
-                ['completed', 'agency_approved', 'employer_approved', 'billed'][array_rand([0, 1, 2, 3])] :
-                'cancelled';
+            return ['completed', 'completed', 'completed', 'no_show'][array_rand([0, 0, 0, 1])];
         }
     }
 
@@ -912,13 +837,13 @@ class ShiftPilotSeeder extends Seeder
         $now = Carbon::now();
 
         $openShifts = DB::table('shifts')
-            ->whereIn('status', ['open', 'offered'])
+            ->where('status', 'scheduled')
             ->where('start_time', '>', $now)
-            ->limit(30)
+            ->limit(20)
             ->get();
 
         foreach ($openShifts as $shift) {
-            $numOffers = rand(1, 4);
+            $numOffers = rand(1, 3);
             $offeredEmployees = [];
 
             for ($i = 1; $i <= $numOffers; $i++) {
@@ -970,15 +895,17 @@ class ShiftPilotSeeder extends Seeder
         $now = Carbon::now();
 
         $completedShifts = DB::table('shifts')
-            ->whereIn('status', ['completed', 'agency_approved', 'employer_approved', 'billed'])
-            ->whereNotNull('employee_id')
+            ->where('status', 'completed')
+            ->limit(30)
             ->get();
 
         foreach ($completedShifts as $shift) {
+            $employeeId = $this->getEmployeeForShift($shift->id);
+            if (!$employeeId) continue;
+
             $clockIn = Carbon::parse($shift->start_time);
             $clockOut = Carbon::parse($shift->end_time);
 
-            // Add some realistic variance to clock in/out times
             $actualClockIn = $clockIn->copy()->addMinutes(rand(-15, 30));
             $actualClockOut = $clockOut->copy()->addMinutes(rand(-10, 45));
 
@@ -987,17 +914,18 @@ class ShiftPilotSeeder extends Seeder
 
             $timesheets[] = [
                 'shift_id' => $shift->id,
-                'employee_id' => $shift->employee_id,
+                'employee_id' => $employeeId,
                 'clock_in' => $actualClockIn,
                 'clock_out' => $actualClockOut,
                 'break_minutes' => $breakMinutes,
                 'hours_worked' => round($hoursWorked, 2),
-                'status' => $this->getTimesheetStatus($shift->status),
-                'agency_approved_by' => in_array($shift->status, ['agency_approved', 'employer_approved', 'billed']) ? rand(2, 6) : null,
-                'agency_approved_at' => in_array($shift->status, ['agency_approved', 'employer_approved', 'billed']) ? $clockOut->copy()->addHours(rand(24, 48)) : null,
-                'approved_by_contact_id' => in_array($shift->status, ['employer_approved', 'billed']) ? $this->getContactForEmployer($shift->employer_id) : null,
-                'approved_at' => in_array($shift->status, ['employer_approved', 'billed']) ? $clockOut->copy()->addHours(rand(72, 168)) : null,
+                'status' => $this->getTimesheetStatus(),
+                'agency_approved_by' => rand(0, 10) > 3 ? rand(2, 6) : null,
+                'agency_approved_at' => rand(0, 10) > 3 ? $clockOut->copy()->addHours(rand(24, 48)) : null,
+                'approved_by_contact_id' => rand(0, 10) > 5 ? $this->getRandomContact() : null,
+                'approved_at' => rand(0, 10) > 5 ? $clockOut->copy()->addHours(rand(72, 168)) : null,
                 'notes' => 'Completed shift as scheduled',
+                'attachments' => json_encode([]),
                 'created_at' => $clockOut,
                 'updated_at' => $now,
             ];
@@ -1007,24 +935,19 @@ class ShiftPilotSeeder extends Seeder
         $this->command->info('Created ' . count($timesheets) . ' timesheets');
     }
 
-    private function getTimesheetStatus($shiftStatus)
+    private function getEmployeeForShift($shiftId)
     {
-        $map = [
-            'completed' => 'pending',
-            'agency_approved' => 'agency_approved',
-            'employer_approved' => 'employer_approved',
-            'billed' => 'employer_approved'
-        ];
-        return $map[$shiftStatus] ?? 'pending';
+        return rand(1, 100);
     }
 
-    private function getContactForEmployer($employerId)
+    private function getTimesheetStatus()
     {
-        $contact = DB::table('contacts')
-            ->where('employer_id', $employerId)
-            ->where('can_sign_timesheets', true)
-            ->inRandomOrder()
-            ->first();
+        return ['pending', 'agency_approved', 'employer_approved'][array_rand([0, 1, 2])];
+    }
+
+    private function getRandomContact()
+    {
+        $contact = DB::table('contacts')->inRandomOrder()->first();
         return $contact ? $contact->id : null;
     }
 
@@ -1034,11 +957,12 @@ class ShiftPilotSeeder extends Seeder
         $now = Carbon::now();
 
         $approvedShifts = DB::table('shifts')
-            ->whereIn('status', ['employer_approved', 'billed'])
+            ->where('status', 'completed')
+            ->limit(20)
             ->get();
 
         foreach ($approvedShifts as $shift) {
-            $contactId = $this->getContactForEmployer($shift->employer_id);
+            $contactId = $this->getRandomContact();
             if (!$contactId) continue;
 
             $approvals[] = [
@@ -1061,13 +985,12 @@ class ShiftPilotSeeder extends Seeder
         $invoices = [];
         $now = Carbon::now();
 
-        // Generate invoices for the last 3 months
         for ($month = 1; $month <= 3; $month++) {
             $invoiceDate = $now->copy()->subMonths($month)->startOfMonth();
-            $numInvoices = rand(15, 25);
+            $numInvoices = rand(10, 20);
 
             for ($i = 1; $i <= $numInvoices; $i++) {
-                $type = ['employer_to_agency', 'agency_to_shiftpilot'][array_rand([0, 1])];
+                $type = ['employer_to_agency', 'agency_to_platform'][array_rand([0, 1])];
                 list($fromType, $fromId, $toType, $toId) = $this->getInvoiceParties($type);
 
                 $subtotal = rand(1500, 25000) + (rand(0, 99) / 100);
@@ -1081,7 +1004,7 @@ class ShiftPilotSeeder extends Seeder
                     'to_type' => $toType,
                     'to_id' => $toId,
                     'reference' => 'INV-' . $invoiceDate->format('Ym') . '-' . str_pad($i, 3, '0', STR_PAD_LEFT),
-                    'line_items' => json_encode($this->generateInvoiceLineItems($subtotal, $month)),
+                    'line_items' => json_encode($this->generateInvoiceLineItems($subtotal)),
                     'subtotal' => $subtotal,
                     'tax_amount' => $taxAmount,
                     'total_amount' => $totalAmount,
@@ -1104,7 +1027,6 @@ class ShiftPilotSeeder extends Seeder
     {
         if ($type === 'employer_to_agency') {
             $employerId = rand(1, 8);
-            // Get an agency that has a relationship with this employer
             $agencyId = DB::table('employer_agency_links')
                 ->where('employer_id', $employerId)
                 ->inRandomOrder()
@@ -1112,57 +1034,21 @@ class ShiftPilotSeeder extends Seeder
             return ['employer', $employerId, 'agency', $agencyId ?? 1];
         } else {
             $agencyId = rand(1, 5);
-            return ['agency', $agencyId, 'shiftpilot', 1];
+            return ['agency', $agencyId, 'platform', 1];
         }
     }
 
-    private function generateInvoiceLineItems($subtotal, $month)
+    private function generateInvoiceLineItems($subtotal)
     {
-        $items = [];
-        $baseDescription = 'Temporary staffing services for ' . $this->getMonthName($month);
-
-        $items[] = [
-            'description' => $baseDescription,
-            'quantity' => 1,
-            'unit_price' => $subtotal,
-            'tax_rate' => 20.00,
-            'total' => $subtotal
-        ];
-
-        // Add platform fee for agency_to_shiftpilot invoices
-        if (rand(0, 10) > 7) {
-            $feeAmount = $subtotal * 0.02; // 2% platform fee
-            $items[] = [
-                'description' => 'Platform service fee',
+        return [
+            [
+                'description' => 'Temporary staffing services',
                 'quantity' => 1,
-                'unit_price' => $feeAmount,
+                'unit_price' => $subtotal,
                 'tax_rate' => 20.00,
-                'total' => $feeAmount
-            ];
-        }
-
-        return $items;
-    }
-
-    private function getMonthName($monthOffset)
-    {
-        $months = [
-            'January',
-            'February',
-            'March',
-            'April',
-            'May',
-            'June',
-            'July',
-            'August',
-            'September',
-            'October',
-            'November',
-            'December'
+                'total' => $subtotal
+            ]
         ];
-        $currentMonth = (int)date('n') - 1;
-        $targetMonth = ($currentMonth - $monthOffset + 12) % 12;
-        return $months[$targetMonth] . ' ' . date('Y');
     }
 
     private function getInvoiceStatus($invoiceDate)
@@ -1225,27 +1111,24 @@ class ShiftPilotSeeder extends Seeder
         $payrolls = [];
         $now = Carbon::now();
 
-        // Create payroll for the last 2 months
         for ($month = 1; $month <= 2; $month++) {
             $periodStart = $now->copy()->subMonths($month)->startOfMonth();
             $periodEnd = $periodStart->copy()->endOfMonth();
 
-            // Create payroll for 70% of active employees
-            $activeEmployees = DB::table('employees')
+            $activeAgencyEmployees = DB::table('agency_employees')
                 ->where('status', 'active')
                 ->inRandomOrder()
-                ->limit(70)
+                ->limit(50)
                 ->get();
 
-            foreach ($activeEmployees as $employee) {
+            foreach ($activeAgencyEmployees as $agencyEmployee) {
                 $totalHours = rand(80, 180);
-                $grossPay = round($totalHours * $employee->pay_rate, 2);
+                $grossPay = round($totalHours * $agencyEmployee->pay_rate, 2);
                 $taxes = round($grossPay * 0.2, 2);
                 $netPay = $grossPay - $taxes;
 
                 $payrolls[] = [
-                    'agency_id' => $employee->agency_id,
-                    'employee_id' => $employee->id,
+                    'agency_employee_id' => $agencyEmployee->id,
                     'period_start' => $periodStart->format('Y-m-d'),
                     'period_end' => $periodEnd->format('Y-m-d'),
                     'total_hours' => $totalHours,
@@ -1276,9 +1159,10 @@ class ShiftPilotSeeder extends Seeder
                 $periodEnd = $periodStart->copy()->endOfMonth();
 
                 $totalAmount = DB::table('payrolls')
-                    ->where('agency_id', $agencyId)
-                    ->where('period_start', $periodStart->format('Y-m-d'))
-                    ->sum('gross_pay');
+                    ->join('agency_employees', 'payrolls.agency_employee_id', '=', 'agency_employees.id')
+                    ->where('agency_employees.agency_id', $agencyId)
+                    ->where('payrolls.period_start', $periodStart->format('Y-m-d'))
+                    ->sum('payrolls.gross_pay');
 
                 if ($totalAmount > 0) {
                     $payouts[] = [
@@ -1291,8 +1175,9 @@ class ShiftPilotSeeder extends Seeder
                         'metadata' => json_encode([
                             'period' => $periodStart->format('F Y'),
                             'employee_count' => DB::table('payrolls')
-                                ->where('agency_id', $agencyId)
-                                ->where('period_start', $periodStart->format('Y-m-d'))
+                                ->join('agency_employees', 'payrolls.agency_employee_id', '=', 'agency_employees.id')
+                                ->where('agency_employees.agency_id', $agencyId)
+                                ->where('payrolls.period_start', $periodStart->format('Y-m-d'))
                                 ->count()
                         ]),
                         'created_at' => $periodEnd->copy()->addDays(7),
@@ -1373,185 +1258,15 @@ class ShiftPilotSeeder extends Seeder
         $this->command->info('Created ' . count($subscriptions) . ' subscriptions');
     }
 
-    private function createPlatformBilling()
-    {
-        DB::table('platform_billing')->insert([
-            'commission_rate' => 2.00,
-            'transaction_fee_flat' => 0.30,
-            'transaction_fee_percent' => 2.9,
-            'payout_schedule_days' => 7,
-            'tax_vat_rate_percent' => 20.00,
-            'created_at' => Carbon::now()->subYear(),
-            'updated_at' => Carbon::now(),
-        ]);
-
-        $this->command->info('Created platform billing settings');
-    }
-
-    private function createRateCards()
-    {
-        $rateCards = [];
-        $now = Carbon::now();
-
-        $roleRates = [
-            'Registered Nurse' => [28.00, 35.00],
-            'Senior Care Assistant' => [13.00, 17.00],
-            'Healthcare Assistant' => [11.00, 14.50],
-            'HGV Driver' => [16.00, 22.00],
-            'Warehouse Operative' => [10.00, 13.50],
-            'Retail Supervisor' => [11.50, 15.00],
-            'Security Officer' => [10.50, 14.00],
-            'Commercial Cleaner' => [9.50, 12.00]
-        ];
-
-        foreach ($roleRates as $role => $range) {
-            for ($i = 1; $i <= 3; $i++) {
-                $employerId = $this->getEmployerForRole($role);
-                $locationId = DB::table('locations')
-                    ->where('employer_id', $employerId)
-                    ->inRandomOrder()
-                    ->value('id');
-
-                $rateCards[] = [
-                    'employer_id' => $employerId,
-                    'agency_id' => null,
-                    'role_key' => strtolower(str_replace(' ', '_', $role)),
-                    'location_id' => $locationId,
-                    'day_of_week' => null,
-                    'start_time' => null,
-                    'end_time' => null,
-                    'rate' => round(rand($range[0] * 100, $range[1] * 100) / 100, 2),
-                    'currency' => 'GBP',
-                    'effective_from' => $now->copy()->subMonths(3)->format('Y-m-d'),
-                    'effective_to' => $now->copy()->addYears(1)->format('Y-m-d'),
-                    'created_at' => $now->copy()->subMonths(4),
-                    'updated_at' => $now,
-                ];
-            }
-        }
-
-        DB::table('rate_cards')->insert($rateCards);
-        $this->command->info('Created ' . count($rateCards) . ' rate cards');
-    }
-
-    private function getEmployerForRole($role)
-    {
-        if (str_contains($role, 'Nurse') || str_contains($role, 'Care')) return 1;
-        if (str_contains($role, 'Driver')) return 3;
-        if (str_contains($role, 'Warehouse')) return 6;
-        if (str_contains($role, 'Retail')) return 2;
-        if (str_contains($role, 'Security')) return rand(1, 8);
-        if (str_contains($role, 'Cleaner')) return rand(1, 8);
-        return rand(1, 8);
-    }
-
-    private function createNotifications()
-    {
-        $notifications = [];
-        $now = Carbon::now();
-
-        $templates = [
-            'shift.assigned:employee' => 'You have been assigned to a shift',
-            'shift_offer.sent:employee' => 'New shift offer available',
-            'timesheet.submitted:agency' => 'Timesheet submitted for approval',
-            'invoice.generated:employer' => 'New invoice available',
-            'shift.completed:agency' => 'Shift completed awaiting approval',
-            'time_off.approved:employee' => 'Your time off request has been approved'
-        ];
-
-        for ($i = 1; $i <= 150; $i++) {
-            $templateKey = array_rand($templates);
-            $recipientType = ['user', 'agency', 'employer'][array_rand([0, 1, 2])];
-            $recipientId = $recipientType === 'user' ? rand(2, 161) : ($recipientType === 'agency' ? rand(1, 5) : rand(1, 8));
-
-            $notifications[] = [
-                'recipient_type' => $recipientType,
-                'recipient_id' => $recipientId,
-                'channel' => ['email', 'in_app'][array_rand([0, 1])],
-                'template_key' => $templateKey,
-                'payload' => json_encode([
-                    'message' => $templates[$templateKey],
-                    'action_url' => '/notifications/' . $i
-                ]),
-                'is_read' => rand(0, 10) > 4,
-                'sent_at' => $now->copy()->subHours(rand(1, 168)),
-                'created_at' => $now->copy()->subHours(rand(1, 168)),
-                'updated_at' => $now,
-            ];
-        }
-
-        DB::table('notifications')->insert($notifications);
-        $this->command->info('Created ' . count($notifications) . ' notifications');
-    }
-
     private function generateFirstName()
     {
-        $names = [
-            'James',
-            'Mary',
-            'John',
-            'Patricia',
-            'Robert',
-            'Jennifer',
-            'Michael',
-            'Linda',
-            'William',
-            'Elizabeth',
-            'David',
-            'Barbara',
-            'Richard',
-            'Susan',
-            'Joseph',
-            'Jessica',
-            'Thomas',
-            'Sarah',
-            'Charles',
-            'Karen',
-            'Christopher',
-            'Nancy',
-            'Daniel',
-            'Lisa',
-            'Matthew',
-            'Betty',
-            'Anthony',
-            'Margaret',
-            'Mark',
-            'Sandra'
-        ];
+        $names = ['James', 'Mary', 'John', 'Patricia', 'Robert', 'Jennifer', 'Michael', 'Linda', 'William', 'Elizabeth'];
         return $names[array_rand($names)];
     }
 
     private function generateLastName()
     {
-        $names = [
-            'Smith',
-            'Johnson',
-            'Williams',
-            'Brown',
-            'Jones',
-            'Garcia',
-            'Miller',
-            'Davis',
-            'Rodriguez',
-            'Martinez',
-            'Hernandez',
-            'Lopez',
-            'Gonzalez',
-            'Wilson',
-            'Anderson',
-            'Thomas',
-            'Taylor',
-            'Moore',
-            'Jackson',
-            'Martin'
-        ];
+        $names = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez'];
         return $names[array_rand($names)];
-    }
-
-    private function generateTime($startHour, $endHour)
-    {
-        $hour = rand($startHour, $endHour);
-        $minute = rand(0, 1) ? '00' : '30';
-        return sprintf('%02d:%02d', $hour, $minute);
     }
 }

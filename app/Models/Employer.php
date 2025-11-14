@@ -36,14 +36,6 @@ class Employer extends Model
         'status' => 'string',
     ];
 
-    /**
-     * Get the employer's profile.
-     */
-    public function profile(): MorphOne
-    {
-        return $this->morphOne(Profile::class, 'profileable');
-    }
-
     public function contacts(): HasMany
     {
         return $this->hasMany(Contact::class);

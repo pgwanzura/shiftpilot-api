@@ -6,13 +6,10 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
-use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class User extends Authenticatable
 {
-    use HasFactory;
-    use Notifiable;
-    use HasApiTokens;
+    use HasFactory, Notifiable, HasApiTokens;
 
     protected $fillable = [
         'name',
@@ -21,7 +18,6 @@ class User extends Authenticatable
         'role',
         'phone',
         'status',
-        // Removed address fields as they belong to profileable entities
         'meta',
         'email_verified_at',
         'last_login_at'
@@ -36,18 +32,13 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'last_login_at' => 'datetime',
         'meta' => 'array',
-        // Removed latitude and longitude as they belong to profileable entities
     ];
 
     protected $appends = [
-        // Removed full_address, has_complete_address, as they belong to profileable entities
         'has_complete_profile',
         'display_role'
     ];
 
-    /**
-     * Role checking methods
-     */
     public function isAdmin(): bool
     {
         return $this->isSuperAdmin();
@@ -93,97 +84,130 @@ class User extends Authenticatable
         return $this->role === 'super_admin';
     }
 
-    /**
-     * Get agency ID for agency users
-     */
     public function getAgencyId(): ?int
     {
-        if ($this->profile && method_exists($this->profile->profileable, 'getAgencyId')) {
-            return $this->profile->profileable->getAgencyId();
+        if (!$this->profile) {
+            return null;
+        }
+
+        $profileable = $this->profile->profileable;
+
+        if ($profileable instanceof Agency) {
+            return $profileable->id;
+        }
+
+        if ($profileable instanceof Agent && $profileable->agency_id) {
+            return $profileable->agency_id;
+        }
+
+        if ($profileable instanceof Employee && $profileable->agency_id) {
+            return $profileable->agency_id;
         }
 
         return null;
     }
 
-    /**
-     * Get employer ID for employer users
-     */
     public function getEmployerId(): ?int
     {
-        if ($this->profile && method_exists($this->profile->profileable, 'getEmployerId')) {
-            return $this->profile->profileable->getEmployerId();
+        if (!$this->profile) {
+            return null;
+        }
+
+        $profileable = $this->profile->profileable;
+
+        if ($profileable instanceof Employer) {
+            return $profileable->id;
+        }
+
+        if ($profileable instanceof Contact && $profileable->employer_id) {
+            return $profileable->employer_id;
         }
 
         return null;
     }
 
-    /**
-     * Check if user can approve assignments (employer contacts)
-     */
     public function canApproveAssignments(): bool
     {
-        if ($this->profile && method_exists($this->profile->profileable, 'canApproveAssignments')) {
-            return $this->profile->profileable->canApproveAssignments();
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        if (!$this->profile) {
+            return false;
+        }
+
+        $profileable = $this->profile->profileable;
+
+        if ($profileable instanceof Contact) {
+            return $profileable->can_approve_assignments;
+        }
+
+        if ($profileable instanceof Employer) {
+            return true;
         }
 
         return false;
     }
 
-    /**
-     * Check if user can approve timesheets (employer contacts)
-     */
     public function canApproveTimesheets(): bool
     {
-        if ($this->profile && method_exists($this->profile->profileable, 'canApproveTimesheets')) {
-            return $this->profile->profileable->canApproveTimesheets();
+        if ($this->isSuperAdmin()) {
+            return true;
         }
 
-        return in_array($this->role, ['employer_admin', 'contact', 'super_admin']);
+        if (!$this->profile) {
+            return false;
+        }
+
+        $profileable = $this->profile->profileable;
+
+        if ($profileable instanceof Contact) {
+            return $profileable->can_approve_timesheets;
+        }
+
+        return $this->isEmployerAdmin() || $this->isAgencyAdmin();
     }
 
-    /**
-     * Check if user can manage agency employees
-     */
     public function canManageAgencyEmployees(): bool
     {
-        return $this->isAgencyAdmin() || $this->isAgent();
+        return $this->isAgencyAdmin() || $this->isAgent() || $this->isSuperAdmin();
     }
 
-    /**
-     * Check if user can manage employer locations
-     */
     public function canManageLocations(): bool
     {
-        return $this->isEmployerAdmin();
+        return $this->isEmployerAdmin() || $this->isSuperAdmin();
     }
 
-    /**
-     * Check if user can create shift requests
-     */
     public function canCreateShiftRequests(): bool
     {
-        return $this->isEmployerAdmin() || $this->isContact();
+        return $this->isEmployerAdmin() || $this->isContact() || $this->isSuperAdmin();
     }
 
-    /**
-     * Check if user can view financial information
-     */
     public function canViewFinancials(): bool
     {
-        return $this->isAdmin() || $this->isAgencyAdmin();
+        return $this->isSuperAdmin() || $this->isAgencyAdmin();
     }
 
-    /**
-     * Get user's primary entity (Agency, Employer, etc.)
-     */
+    public function canManageShifts(): bool
+    {
+        return $this->isAgencyAdmin() || $this->isEmployerAdmin() || $this->isAgent() || $this->isSuperAdmin();
+    }
+
+    public function canManageContracts(): bool
+    {
+        return $this->isAgencyAdmin() || $this->isEmployerAdmin() || $this->isSuperAdmin();
+    }
+
+    public function canViewReports(): bool
+    {
+        return $this->isSuperAdmin() || $this->isAgencyAdmin() || $this->isEmployerAdmin();
+    }
+
     public function getPrimaryEntity()
     {
         return $this->profile?->profileable;
     }
 
-    /**
-     * Get user's display role with entity name
-     */
     public function getDisplayRoleAttribute(): string
     {
         $entity = $this->getPrimaryEntity();
@@ -191,45 +215,89 @@ class User extends Authenticatable
 
         return match ($this->role) {
             'super_admin' => 'Super Administrator',
-            'agency_admin' => "Agency Admin" . ($entityName ? " - {$entityName}" : ''),
-            'agent' => "Agent" . ($entityName ? " - {$entityName}" : ''),
-            'employer_admin' => "Employer Admin" . ($entityName ? " - {$entityName}" : ''),
-            'contact' => "Contact" . ($entityName ? " - {$entityName}" : ''),
+            'agency_admin' => "Agency Administrator" . ($entityName ? " - {$entityName}" : ''),
+            'agent' => "Agency Agent" . ($entityName ? " - {$entityName}" : ''),
+            'employer_admin' => "Employer Administrator" . ($entityName ? " - {$entityName}" : ''),
+            'contact' => "Employer Contact" . ($entityName ? " - {$entityName}" : ''),
             'employee' => "Employee",
             default => ucfirst(str_replace('_', ' ', $this->role))
         };
     }
 
-    /**
-     * Check if user has complete profile
-     */
     public function getHasCompleteProfileAttribute(): bool
     {
-        // A user profile is complete if the base user details are set and a profileable entity exists
-        $required = ['name', 'phone'];
+        $requiredFields = ['name', 'email', 'phone'];
 
-        foreach ($required as $field) {
+        foreach ($requiredFields as $field) {
             if (empty($this->$field)) {
                 return false;
             }
         }
 
-        return (bool) $this->profile;
+        if (!$this->profile) {
+            return false;
+        }
+
+        $profileable = $this->profile->profileable;
+
+        if (!$profileable) {
+            return false;
+        }
+
+        if (method_exists($profileable, 'hasCompleteProfile')) {
+            return $profileable->hasCompleteProfile();
+        }
+
+        return true;
     }
 
-    /**
-     * Relationships
-     */
-    public function profile(): MorphOne
+    public function scopeActive($query)
     {
-        return $this->morphOne(Profile::class, 'profileable');
+        return $query->where('status', 'active');
     }
 
-    /**
-     * Check if user can manage shifts (existing method)
-     */
-    public function canManageShifts(): bool
+    public function scopeByRole($query, $role)
     {
-        return in_array($this->role, ['agency_admin', 'employer_admin', 'agent', 'super_admin']);
+        return $query->where('role', $role);
+    }
+
+    public function scopeAgencyUsers($query)
+    {
+        return $query->whereIn('role', ['agency_admin', 'agent']);
+    }
+
+    public function scopeEmployerUsers($query)
+    {
+        return $query->whereIn('role', ['employer_admin', 'contact']);
+    }
+
+    public function markAsVerified()
+    {
+        $this->update(['email_verified_at' => now()]);
+    }
+
+    public function recordLogin()
+    {
+        $this->update(['last_login_at' => now()]);
+    }
+
+    public function hasVerifiedEmail(): bool
+    {
+        return !is_null($this->email_verified_at);
+    }
+
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
+    }
+
+    public function canImpersonate(): bool
+    {
+        return $this->isSuperAdmin();
+    }
+
+    public function canBeImpersonated(): bool
+    {
+        return !$this->isSuperAdmin();
     }
 }
