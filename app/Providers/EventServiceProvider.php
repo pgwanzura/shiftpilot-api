@@ -2,172 +2,209 @@
 
 namespace App\Providers;
 
+use App\Events\Assignment\AssignmentCancelled;
+use App\Events\Assignment\AssignmentCompleted;
+use App\Events\Assignment\AssignmentCreated;
+use App\Events\Assignment\AssignmentStatusChanged;
+use App\Events\AvailabilityUpdated;
+use App\Events\InvoiceGenerated;
+use App\Events\InvoicePaid;
+use App\Events\Location\LocationCreated;
+use App\Events\Location\LocationUpdated;
+use App\Events\Payroll\PayrollGenerated;
+use App\Events\PayoutProcessed;
+use App\Events\Shift\ShiftAssigned;
+use App\Events\Shift\ShiftCancelled;
+use App\Events\Shift\ShiftCompleted;
+use App\Events\Shift\ShiftCreated;
+use App\Events\Shift\ShiftOffered;
+use App\Events\Shift\ShiftOfferAccepted;
+use App\Events\Shift\ShiftOfferRejected;
+use App\Events\Shift\ShiftOfferSent;
+use App\Events\ShiftRequest\ShiftRequestCreated;
+use App\Events\ShiftRequest\ShiftRequestPublished;
+use App\Events\SubscriptionRenewed;
+use App\Events\TimeOff\TimeOffApproved;
+use App\Events\TimeOff\TimeOffRejected;
+use App\Events\TimeOff\TimeOffRequested;
+use App\Events\Timesheet\TimesheetAgencyApproved;
+use App\Events\Timesheet\TimesheetEmployerApproved;
+use App\Events\Timesheet\TimesheetSubmitted;
+use App\Events\UserRegistered;
+use App\Listeners\Assignment\HandleAssignmentCancellation;
+use App\Listeners\Assignment\HandleAssignmentCompletion;
+use App\Listeners\Assignment\SendAssignmentCreatedNotifications;
+use App\Listeners\Assignment\SendAssignmentStatusChangeNotifications;
+use App\Listeners\AuditLogListener;
+use App\Listeners\LogLocationActivity;
+use App\Listeners\LogShiftActivity;
+use App\Listeners\LogTimesheetActivity;
+use App\Listeners\NotifyAgencyOfNewLocation;
+use App\Listeners\ProcessAvailabilityUpdated;
+use App\Listeners\ProcessInvoiceGenerated;
+use App\Listeners\ProcessInvoicePaid;
+use App\Listeners\ProcessPayoutProcessed;
+use App\Listeners\ProcessShiftAssigned;
+use App\Listeners\ProcessShiftCompleted;
+use App\Listeners\ProcessShiftOfferAccepted;
+use App\Listeners\ProcessShiftOfferRejected;
+use App\Listeners\ProcessShiftOfferSent;
+use App\Listeners\ProcessShiftOffered;
+use App\Listeners\ProcessShiftRequested;
+use App\Listeners\ProcessSubscriptionRenewed;
+use App\Listeners\ProcessTimeOffApproved;
+use App\Listeners\ProcessTimeOffRequested;
+use App\Listeners\ProcessTimesheetAgencyApproved;
+use App\Listeners\ProcessTimesheetEmployerApproved;
+use App\Listeners\ProcessTimesheetSubmitted;
+use App\Listeners\SendInvoiceNotification;
+use App\Listeners\SendSystemNotifications;
+use App\Listeners\SendUserWelcomeNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 
 class EventServiceProvider extends ServiceProvider
 {
     protected $listen = [
-        \App\Events\Location\LocationCreated::class => [
-            \App\Listeners\LogLocationActivity::class,
-            \App\Listeners\NotifyAgencyOfNewLocation::class,
+        LocationCreated::class => [
+            LogLocationActivity::class,
+            NotifyAgencyOfNewLocation::class,
+            AuditLogListener::class,
         ],
-        \App\Events\Location\LocationUpdated::class => [
-            \App\Listeners\LogLocationActivity::class,
-            \App\Listeners\AuditLogListener::class,
+        LocationUpdated::class => [
+            LogLocationActivity::class,
+            AuditLogListener::class,
         ],
-
-        \App\Events\UserRegistered::class => [
-            \App\Listeners\SendUserWelcomeNotification::class,
-            \App\Listeners\AuditLogListener::class,
+        UserRegistered::class => [
+            SendUserWelcomeNotification::class,
+            AuditLogListener::class,
         ],
-
-        \App\Events\Shift\ShiftCreated::class => [
-            \App\Listeners\LogShiftActivity::class,
-            \App\Listeners\AuditLogListener::class,
+        ShiftCreated::class => [
+            LogShiftActivity::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-        \App\Events\Shift\ShiftCancelled::class => [
-            \App\Listeners\LogShiftActivity::class,
-            \App\Listeners\AuditLogListener::class,
+        ShiftCancelled::class => [
+            LogShiftActivity::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-        // Renamed from ShiftRequested to ShiftRequestCreated
-        \App\Events\ShiftRequest\ShiftRequestCreated::class => [
-            \App\Listeners\ProcessShiftRequested::class, // Assuming this listener handles creation
-            \App\Listeners\AuditLogListener::class,
+        ShiftRequestCreated::class => [
+            ProcessShiftRequested::class,
+            AuditLogListener::class,
         ],
-        \App\Events\ShiftRequest\ShiftRequestPublished::class => [
-            // Add a listener for this event, e.g., NotifyAgenciesForShiftRequest::class
-            \App\Listeners\AuditLogListener::class,
+        ShiftRequestPublished::class => [
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-        \App\Events\Shift\ShiftOffered::class => [
-            \App\Listeners\ProcessShiftOffered::class,
-            \App\Listeners\AuditLogListener::class,
+        ShiftOffered::class => [
+            ProcessShiftOffered::class,
+            AuditLogListener::class,
         ],
-        \App\Events\Shift\ShiftAssigned::class => [
-            \App\Listeners\ProcessShiftAssigned::class,
-            \App\Listeners\AuditLogListener::class,
+        ShiftAssigned::class => [
+            ProcessShiftAssigned::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-        \App\Events\Shift\ShiftCompleted::class => [
-            \App\Listeners\ProcessShiftCompleted::class,
-            \App\Listeners\AuditLogListener::class,
+        ShiftCompleted::class => [
+            ProcessShiftCompleted::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-
-        \App\Events\Shift\ShiftOfferSent::class => [
-            \App\Listeners\ProcessShiftOfferSent::class,
-            \App\Listeners\AuditLogListener::class,
+        ShiftOfferSent::class => [
+            ProcessShiftOfferSent::class,
+            AuditLogListener::class,
         ],
-        \App\Events\Shift\ShiftOfferAccepted::class => [
-            \App\Listeners\ProcessShiftOfferAccepted::class,
-            \App\Listeners\AuditLogListener::class,
+        ShiftOfferAccepted::class => [
+            ProcessShiftOfferAccepted::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-        \App\Events\Shift\ShiftOfferRejected::class => [
-            \App\Listeners\ProcessShiftOfferRejected::class,
-            \App\Listeners\AuditLogListener::class,
+        ShiftOfferRejected::class => [
+            ProcessShiftOfferRejected::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-
-        \App\Events\Timesheet\TimesheetSubmitted::class => [
-            \App\Listeners\LogTimesheetActivity::class,
-            \App\Listeners\ProcessTimesheetSubmitted::class,
-            \App\Listeners\AuditLogListener::class,
+        TimesheetSubmitted::class => [
+            LogTimesheetActivity::class,
+            ProcessTimesheetSubmitted::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-        // Generic TimesheetApproved/Rejected are assumed to be replaced by specific ones if schema is primary
-        // \App\Events\Timesheet\TimesheetApproved::class => [
-        //     \App\Listeners\LogTimesheetActivity::class,
-        // ],
-        // \App\Events\Timesheet\TimesheetRejected::class => [
-        //     \App\Listeners\LogTimesheetActivity::class,
-        // ],
-        \App\Events\Timesheet\TimesheetAgencyApproved::class => [
-            \App\Listeners\ProcessTimesheetAgencyApproved::class,
-            \App\Listeners\AuditLogListener::class,
+        TimesheetAgencyApproved::class => [
+            ProcessTimesheetAgencyApproved::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-        \App\Events\Timesheet\TimesheetEmployerApproved::class => [
-            \App\Listeners\ProcessTimesheetEmployerApproved::class,
-            \App\Listeners\AuditLogListener::class,
+        TimesheetEmployerApproved::class => [
+            ProcessTimesheetEmployerApproved::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-
-        \App\Events\InvoiceGenerated::class => [
-            \App\Listeners\SendInvoiceNotification::class,
-            \App\Listeners\ProcessInvoiceGenerated::class,
-            \App\Listeners\AuditLogListener::class,
+        InvoiceGenerated::class => [
+            SendInvoiceNotification::class,
+            ProcessInvoiceGenerated::class,
+            AuditLogListener::class,
         ],
-        \App\Events\InvoicePaid::class => [
-            \App\Listeners\ProcessInvoicePaid::class,
-            \App\Listeners\AuditLogListener::class,
+        InvoicePaid::class => [
+            ProcessInvoicePaid::class,
+            AuditLogListener::class,
         ],
-        \App\Events\Payroll\PayrollGenerated::class => [
-            // Add a listener for this event, e.g., ProcessPayrollRecords::class
-            \App\Listeners\AuditLogListener::class,
+        PayrollGenerated::class => [
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-        \App\Events\PayoutProcessed::class => [
-            \App\Listeners\ProcessPayoutProcessed::class,
-            \App\Listeners\AuditLogListener::class,
+        PayoutProcessed::class => [
+            ProcessPayoutProcessed::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-
-        // Removed placeholder Payment Events - not defined in schema listeners
-        // \App\Events\PaymentLogged::class => [
-        //     // Add payment logging listeners
-        // ],
-        // \App\Events\PaymentConfirmed::class => [
-        //     // Add payment confirmation listeners
-        // ],
-
-        // Removed placeholder Notification Events - not defined in schema listeners
-        // \App\Events\NotificationSent::class => [
-        //     // Add notification sent listeners
-        // ],
-
-        \App\Events\AvailabilityUpdated::class => [
-            \App\Listeners\ProcessAvailabilityUpdated::class,
-            \App\Listeners\AuditLogListener::class,
+        AvailabilityUpdated::class => [
+            ProcessAvailabilityUpdated::class,
+            AuditLogListener::class,
         ],
-        \App\Events\TimeOff\TimeOffRequested::class => [
-            \App\Listeners\ProcessTimeOffRequested::class,
-            \App\Listeners\AuditLogListener::class,
+        TimeOffRequested::class => [
+            ProcessTimeOffRequested::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-        \App\Events\TimeOff\TimeOffApproved::class => [
-            \App\Listeners\ProcessTimeOffApproved::class,
-            \App\Listeners\AuditLogListener::class,
+        TimeOffApproved::class => [
+            ProcessTimeOffApproved::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-        \App\Events\TimeOff\TimeOffRejected::class => [
-            // Add a listener for this event, e.g., NotifyEmployeeOfTimeOffRejection::class
-            \App\Listeners\AuditLogListener::class,
+        TimeOffRejected::class => [
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-
-        \App\Events\SubscriptionRenewed::class => [
-            \App\Listeners\ProcessSubscriptionRenewed::class,
-            \App\Listeners\AuditLogListener::class,
+        SubscriptionRenewed::class => [
+            ProcessSubscriptionRenewed::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-
-        \App\Events\Assignment\AssignmentCreated::class => [
-            \App\Listeners\Assignment\SendAssignmentCreatedNotifications::class,
-            \App\Listeners\AuditLogListener::class,
+        AssignmentCreated::class => [
+            SendAssignmentCreatedNotifications::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-        \App\Events\Assignment\AssignmentStatusChanged::class => [
-            \App\Listeners\Assignment\SendAssignmentStatusChangeNotifications::class,
-            \App\Listeners\AuditLogListener::class,
+        AssignmentStatusChanged::class => [
+            SendAssignmentStatusChangeNotifications::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-        \App\Events\Assignment\AssignmentCompleted::class => [
-            \App\Listeners\Assignment\HandleAssignmentCompletion::class,
-            \App\Listeners\AuditLogListener::class,
+        AssignmentCompleted::class => [
+            HandleAssignmentCompletion::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-        // Removed placeholder AssignmentExtended Event - not defined in schema listeners
-        // \App\Events\Assignment\AssignmentExtended::class => [
-        //     // Add listeners for extension events
-        // ],
-        \App\Events\Assignment\AssignmentCancelled::class => [
-            \App\Listeners\Assignment\HandleAssignmentCancellation::class,
-            \App\Listeners\AuditLogListener::class,
+        AssignmentCancelled::class => [
+            HandleAssignmentCancellation::class,
+            AuditLogListener::class,
+            SendSystemNotifications::class,
         ],
-    ];
-
-    protected $subscribe = [
-        \App\Listeners\LogLocationActivity::class,
-        \App\Listeners\LogShiftActivity::class,
-        \App\Listeners\LogTimesheetActivity::class,
     ];
 
     public function boot(): void
     {
-        //
+        parent::boot();
     }
 }
