@@ -1341,6 +1341,7 @@ return [
                 'channel_fallback' => 'Fallback to email if push notification fails'
             ]
         ],
+        
         'message' => [
             'table' => 'messages',
             'fields' => [
