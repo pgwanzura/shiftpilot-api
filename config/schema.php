@@ -1160,16 +1160,55 @@ return [
         ],
 
         /*
-        |--------------------------------------------------------------------------
-        | Subscription (platform subscriptions)
-        |--------------------------------------------------------------------------
-        */
+|--------------------------------------------------------------------------
+| Price Plans (subscription plans)
+|--------------------------------------------------------------------------
+*/
+        'price_plan' => [
+            'table' => 'price_plans',
+            'fields' => [
+                'id' => ['type' => 'increments'],
+                'plan_key' => ['type' => 'string', 'unique' => true],
+                'name' => ['type' => 'string'],
+                'description' => ['type' => 'text', 'nullable' => true],
+                'base_amount' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2],
+                'billing_interval' => ['type' => 'string', 'default' => 'monthly'],
+                'features' => ['type' => 'json', 'nullable' => true],
+                'limits' => ['type' => 'json', 'nullable' => true],
+                'is_active' => ['type' => 'boolean', 'default' => true],
+                'sort_order' => ['type' => 'integer', 'default' => 0],
+                'meta' => ['type' => 'json', 'nullable' => true],
+                'created_at' => ['type' => 'timestamp'],
+                'updated_at' => ['type' => 'timestamp']
+            ],
+            'validation' => [
+                'plan_key' => 'required|string|unique:price_plans,plan_key',
+                'name' => 'required|string|max:255',
+                'description' => 'nullable|string',
+                'base_amount' => 'required|numeric|min:0',
+                'billing_interval' => 'required|in:monthly,yearly',
+                'features' => 'nullable|array',
+                'limits' => 'nullable|array',
+                'is_active' => 'boolean',
+                'sort_order' => 'integer'
+            ],
+            'indexes' => [
+                ['fields' => ['plan_key'], 'unique' => true],
+                ['fields' => ['is_active', 'sort_order']],
+                ['fields' => ['billing_interval']]
+            ]
+        ],
+
+        /*
+|--------------------------------------------------------------------------
+| Subscription (platform subscriptions) - Agencies only
+|--------------------------------------------------------------------------
+*/
         'subscription' => [
             'table' => 'subscriptions',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'entity_type' => ['type' => 'string'],
-                'entity_id' => ['type' => 'integer'],
+                'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
                 'plan_key' => ['type' => 'string'],
                 'plan_name' => ['type' => 'string'],
                 'amount' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2],
@@ -1183,15 +1222,27 @@ return [
                 'updated_at' => ['type' => 'timestamp']
             ],
             'validation' => [
-                'entity_type' => 'required|in:agency,employer',
-                'entity_id' => 'required|integer',
+                'agency_id' => 'required|exists:agencies,id',
                 'plan_key' => 'required|string',
+                'plan_name' => 'required|string',
                 'amount' => 'required|numeric|min:0',
+                'interval' => 'sometimes|in:monthly,yearly',
                 'status' => 'required|in:active,past_due,cancelled,suspended'
             ],
             'relationships' => [
-                ['type' => 'morphTo', 'name' => 'subscriber']
+                ['type' => 'belongsTo', 'related' => 'Agency']
             ],
+            'indexes' => [
+                ['fields' => ['agency_id', 'status']],
+                ['fields' => ['status', 'current_period_end']],
+                ['fields' => ['plan_key']]
+            ],
+            'business_rules' => [
+                'agency_only' => 'Only agencies can have subscriptions',
+                'active_subscription_limit' => 'Agency can have only one active subscription at a time',
+                'auto_renewal' => 'Active subscriptions auto-renew at period end',
+                'grace_period' => '7-day grace period for past due subscriptions'
+            ]
         ],
 
         /*

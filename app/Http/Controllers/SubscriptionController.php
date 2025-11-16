@@ -2,9 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\Subscription\CreateSubscriptionRequest;
-use App\Http\Requests\Subscription\UpdateSubscriptionRequest;
 use App\Http\Resources\SubscriptionResource;
+use App\Models\Agency;
 use App\Models\Subscription;
 use App\Services\SubscriptionService;
 use Illuminate\Http\JsonResponse;
@@ -14,98 +13,30 @@ class SubscriptionController extends Controller
 {
     public function __construct(
         private SubscriptionService $subscriptionService
-    ) {
-    }
+    ) {}
 
-    public function index(Request $request): JsonResponse
+    public function index(Request $request)
     {
         $subscriptions = $this->subscriptionService->getSubscriptions($request->all());
-        return response()->json([
-            'success' => true,
-            'data' => $subscriptions,
-            'message' => 'Subscriptions retrieved successfully'
-        ]);
+        return SubscriptionResource::collection($subscriptions);
     }
 
-    public function store(CreateSubscriptionRequest $request): JsonResponse
+    public function show(Subscription $subscription): SubscriptionResource
     {
-        $subscription = $this->subscriptionService->createSubscription($request->validated());
-        return response()->json([
-            'success' => true,
-            'data' => new SubscriptionResource($subscription),
-            'message' => 'Subscription created successfully'
-        ]);
+        return new SubscriptionResource($subscription->load(['agency', 'pricePlan']));
     }
 
-    public function show(Subscription $subscription): JsonResponse
+    public function cancel(Subscription $subscription): SubscriptionResource
     {
-        $subscription->load(['subscriber']);
-        return response()->json([
-            'success' => true,
-            'data' => new SubscriptionResource($subscription),
-            'message' => 'Subscription retrieved successfully'
-        ]);
+        $this->authorize('cancel', $subscription);
+        $updatedSubscription = $this->subscriptionService->cancelSubscription($subscription);
+        return new SubscriptionResource($updatedSubscription);
     }
 
-    public function update(UpdateSubscriptionRequest $request, Subscription $subscription): JsonResponse
+    public function renew(Subscription $subscription): SubscriptionResource
     {
-        $subscription = $this->subscriptionService->updateSubscription($subscription, $request->validated());
-        return response()->json([
-            'success' => true,
-            'data' => new SubscriptionResource($subscription),
-            'message' => 'Subscription updated successfully'
-        ]);
-    }
-
-    public function destroy(Subscription $subscription): JsonResponse
-    {
-        $this->subscriptionService->deleteSubscription($subscription);
-        return response()->json([
-            'success' => true,
-            'data' => null,
-            'message' => 'Subscription deleted successfully'
-        ]);
-    }
-
-    public function cancel(Subscription $subscription): JsonResponse
-    {
-        $this->authorize('update', $subscription);
-        $subscription = $this->subscriptionService->cancelSubscription($subscription);
-
-        return response()->json([
-            'success' => true,
-            'data' => new SubscriptionResource($subscription),
-            'message' => 'Subscription cancelled successfully'
-        ]);
-    }
-
-    public function renew(Subscription $subscription): JsonResponse
-    {
-        $this->authorize('update', $subscription);
-        $subscription = $this->subscriptionService->renewSubscription($subscription);
-
-        return response()->json([
-            'success' => true,
-            'data' => new SubscriptionResource($subscription),
-            'message' => 'Subscription renewed successfully'
-        ]);
-    }
-
-    public function changePlan(Subscription $subscription, Request $request): JsonResponse
-    {
-        $this->authorize('update', $subscription);
-        $request->validate([
-            'plan_key' => 'required|string',
-            'plan_name' => 'required|string',
-            'amount' => 'required|numeric|min:0'
-        ]);
-
-        $subscription = $this->subscriptionService->changePlan($subscription, $request->all());
-
-        return response()->json([
-            'success' => true,
-            'data' => new SubscriptionResource($subscription),
-            'message' => 'Subscription plan changed successfully'
-        ]);
+        $this->authorize('renew', $subscription);
+        $updatedSubscription = $this->subscriptionService->renewSubscription($subscription);
+        return new SubscriptionResource($updatedSubscription);
     }
 }

@@ -39,11 +39,14 @@ use App\Http\Controllers\{
     WebhookSubscriptionController,
     ProfileController,
     AssignmentController,
-    CalendarEventsController
+    CalendarEventsController,
+    AgencySubscriptionController,
+    PricePlanController
 };
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('auth')->middleware('api')->group(function () {
+// Public Routes
+Route::prefix('auth')->middleware('api')->group(function (): void {
     Route::post('/register', [RegisteredUserController::class, 'store']);
     Route::post('/login', [AuthenticatedSessionController::class, 'store'])->name('login');
     Route::post('/forgot-password', [PasswordResetLinkController::class, 'store']);
@@ -51,15 +54,43 @@ Route::prefix('auth')->middleware('api')->group(function () {
     Route::get('email/verify/{id}/{hash}', [VerifyEmailController::class, '__invoke'])->name('verification.verify');
 });
 
-Route::middleware('auth:sanctum')->group(function () {
+// Public Price Plans (No authentication required)
+Route::get('/price-plans', [PricePlanController::class, 'index']);
+
+Route::middleware('auth:sanctum')->group(function (): void {
+    // Authentication & User Management
     Route::get('/user', [UserController::class, 'show']);
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::post('email/verification-notification', [EmailVerificationNotificationController::class, 'store'])->name('verification.send');
 
-    Route::prefix('agencies/{agency}')->group(function () {
+    // Subscription & Billing Domain
+    Route::prefix('subscriptions')->group(function (): void {
+        Route::get('/', [SubscriptionController::class, 'index'])->middleware('can:viewAny,App\Models\Subscription');
+        Route::get('{subscription}', [SubscriptionController::class, 'show'])->middleware('can:view,subscription');
+        Route::put('{subscription}', [SubscriptionController::class, 'update'])->middleware('can:update,subscription');
+        Route::patch('{subscription}/cancel', [SubscriptionController::class, 'cancel'])->middleware('can:cancel,subscription');
+        Route::patch('{subscription}/renew', [SubscriptionController::class, 'renew'])->middleware('can:renew,subscription');
+    });
+
+    Route::prefix('agency-subscriptions')->group(function (): void {
+        Route::get('{agency}', [AgencySubscriptionController::class, 'show'])->middleware('can:view,agency');
+        Route::post('{agency}', [AgencySubscriptionController::class, 'store'])->middleware('can:create,App\Models\Subscription');
+    });
+
+    Route::prefix('price-plans')->group(function (): void {
+        Route::post('/', [PricePlanController::class, 'store'])->middleware('can:create,App\Models\PricePlan');
+        Route::get('{pricePlan}', [PricePlanController::class, 'show']);
+        Route::put('{pricePlan}', [PricePlanController::class, 'update'])->middleware('can:update,pricePlan');
+        Route::delete('{pricePlan}', [PricePlanController::class, 'destroy'])->middleware('can:delete,pricePlan');
+        Route::patch('{pricePlan}/activate', [PricePlanController::class, 'activate'])->middleware('can:update,pricePlan');
+        Route::patch('{pricePlan}/deactivate', [PricePlanController::class, 'deactivate'])->middleware('can:update,pricePlan');
+    });
+
+    // Agency Management Domain
+    Route::prefix('agencies/{agency}')->group(function (): void {
         Route::get('dashboard', [AgencyController::class, 'dashboard']);
         Route::get('employees', [AgencyController::class, 'employees']);
-        Route::post('employees', [AgencyController::class, 'registerEmployee']);
+        Route::post('employees', [AgencyController::class, 'registerEmployee'])->middleware('subscription.limit:employees');
         Route::put('employees/{employeeId}', [AgencyController::class, 'updateEmployee']);
         Route::get('assignments', [AgencyController::class, 'assignments']);
         Route::post('assignments', [AgencyController::class, 'createAssignment']);
@@ -82,7 +113,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('response-stats', [AgencyController::class, 'getAgencyResponseStats']);
     });
 
-    Route::prefix('agency-branches')->group(function () {
+    Route::prefix('agency-branches')->group(function (): void {
         Route::get('/', [AgencyBranchController::class, 'index']);
         Route::post('/', [AgencyBranchController::class, 'store']);
         Route::get('{branch}', [AgencyBranchController::class, 'show']);
@@ -93,9 +124,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('{branch}/nearby', [AgencyBranchController::class, 'nearby']);
     });
 
-    // Existing Assignment Routes
-    Route::apiResource('assignments', AssignmentController::class);
-    Route::prefix('assignments')->group(function () {
+    // Staffing Operations Domain
+    Route::prefix('assignments')->group(function (): void {
+        Route::get('/', [AssignmentController::class, 'index']);
+        Route::post('/', [AssignmentController::class, 'store']);
+        Route::get('{assignment}', [AssignmentController::class, 'show']);
+        Route::put('{assignment}', [AssignmentController::class, 'update']);
+        Route::delete('{assignment}', [AssignmentController::class, 'destroy']);
         Route::patch('{assignment}/status', [AssignmentController::class, 'changeStatus']);
         Route::post('{assignment}/complete', [AssignmentController::class, 'complete']);
         Route::post('{assignment}/suspend', [AssignmentController::class, 'suspend']);
@@ -106,14 +141,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('my-assignments', [AssignmentController::class, 'myAssignments']);
     });
 
-    Route::prefix('employee-preferences')->group(function () {
+    Route::prefix('employee-preferences')->group(function (): void {
         Route::get('/{employee}/preferences', [EmployeePreferencesController::class, 'getByEmployee']);
         Route::put('/{employee}/preferences', [EmployeePreferencesController::class, 'updateByEmployee']);
         Route::get('/{preference}/matching-shifts', [EmployeePreferencesController::class, 'getMatchingShifts']);
     });
 
-
-    Route::prefix('calendar-events')->group(function () {
+    Route::prefix('calendar-events')->group(function (): void {
         Route::get('/', [CalendarEventsController::class, 'index']);
         Route::get('/config', [CalendarEventsController::class, 'getCalendarConfig']);
         Route::get('/filter-options', [CalendarEventsController::class, 'getFilterOptions']);
@@ -136,18 +170,34 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/availability', [CalendarEventsController::class, 'updateAvailability']);
     });
 
+    // Protected routes with subscription limits
+    Route::middleware('subscription.limit:employees')->group(function (): void {
+        Route::post('/employees', [EmployeeController::class, 'store']);
+        Route::put('/employees/{employee}', [EmployeeController::class, 'update']);
+        Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy']);
+    });
 
+    Route::middleware('subscription.limit:shifts_per_month')->group(function (): void {
+        Route::post('/shifts', [ShiftController::class, 'store']);
+        Route::put('/shifts/{shift}', [ShiftController::class, 'update']);
+        Route::delete('/shifts/{shift}', [ShiftController::class, 'destroy']);
+        Route::post('/shift-requests', [ShiftRequestController::class, 'store']);
+        Route::put('/shift-requests/{shiftRequest}', [ShiftRequestController::class, 'update']);
+        Route::delete('/shift-requests/{shiftRequest}', [ShiftRequestController::class, 'destroy']);
+    });
+
+    // Standard API Resources (Read-only operations outside limits)
     Route::apiResource('agencies', AgencyController::class);
     Route::apiResource('agents', AgentController::class);
     Route::apiResource('employers', EmployerController::class);
-    Route::apiResource('employees', EmployeeController::class);
+    Route::apiResource('employees', EmployeeController::class)->only(['index', 'show']);
     Route::apiResource('employee-preferences', EmployeePreferencesController::class);
     Route::apiResource('contacts', ContactController::class);
     Route::apiResource('locations', LocationController::class);
     Route::apiResource('employer-agency-contracts', EmployerAgencyContractController::class);
-    Route::apiResource('shift-requests', ShiftRequestController::class);
+    Route::apiResource('shift-requests', ShiftRequestController::class)->only(['index', 'show']);
     Route::apiResource('agency-responses', AgencyResponseController::class);
-    Route::apiResource('shifts', ShiftController::class);
+    Route::apiResource('shifts', ShiftController::class)->only(['index', 'show']);
     Route::apiResource('shift-offers', ShiftOfferController::class);
     Route::apiResource('shift-approvals', ShiftApprovalController::class);
     Route::apiResource('timesheets', TimesheetController::class);
@@ -159,18 +209,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('payouts', PayoutController::class);
     Route::apiResource('payrolls', PayrollController::class);
     Route::apiResource('rate-cards', RateCardController::class);
-    Route::apiResource('subscriptions', SubscriptionController::class);
     Route::apiResource('audit-logs', AuditLogController::class);
     Route::apiResource('system-notifications', SystemNotificationController::class);
     Route::apiResource('webhook-subscriptions', WebhookSubscriptionController::class);
     Route::apiResource('profiles', ProfileController::class);
 });
 
-Route::get('/healthcheck', function () {
-    return response()->json([
+// System Health Check
+Route::get('/healthcheck', function (): array {
+    return [
         'status' => 'ok',
         'service' => 'ShiftPilot API',
         'timestamp' => now()->toDateTimeString(),
         'version' => '1.0.0'
-    ]);
+    ];
 });

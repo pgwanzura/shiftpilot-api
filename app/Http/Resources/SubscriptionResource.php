@@ -10,20 +10,51 @@ class SubscriptionResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'entity_type' => $this->entity_type,
-            'entity_id' => $this->entity_id,
-            'plan_key' => $this->plan_key,
-            'plan_name' => $this->plan_name,
+            'agency_id' => $this->agency_id,
+            'plan_id' => $this->plan_id,
             'amount' => $this->amount,
             'interval' => $this->interval,
             'status' => $this->status,
             'started_at' => $this->started_at,
             'current_period_start' => $this->current_period_start,
             'current_period_end' => $this->current_period_end,
+            'remaining_days' => $this->getRemainingDays(),
+            'is_active' => $this->isActive(),
+            'is_expired' => $this->isExpired(),
             'meta' => $this->meta,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
-            'subscriber' => $this->whenLoaded('subscriber'),
+            'agency' => $this->whenLoaded('agency'),
+            'plan' => $this->whenLoaded('plan'),
         ];
     }
+
+    protected function getRemainingDays(): ?int
+    {
+        if ($this->current_period_end === null) {
+            return null;
+        }
+
+        $now = now();
+        if ($now->greaterThan($this->current_period_end)) {
+            return 0;
+        }
+
+        return $now->diffInDays($this->current_period_end);
+    }
+
+    protected function isActive(): bool
+    {
+        return $this->status === 'active';
+    }
+
+    protected function isExpired(): bool
+    {
+        if ($this->current_period_end === null) {
+            return false;
+        }
+
+        return now()->greaterThan($this->current_period_end);
+    }
 }
+
