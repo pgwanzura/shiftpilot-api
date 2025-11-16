@@ -4,17 +4,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | ShiftPilot - Refined Platform Configuration
+    | ShiftPilot - Staffing Platform Configuration
     |--------------------------------------------------------------------------
     |
-    | CORE PRINCIPLE: Employees are ONLY linked to Employers through Agencies.
-    | All assignments flow through the Agency-Employee relationship.
+    | CORE ARCHITECTURE: All employee-employer relationships are mediated 
+    | through agencies. Employees are registered with agencies, and assignments
+    | flow through agency-employer contracts.
+    |
+    | This configuration serves as the single source of truth for:
+    | - Database schema definition
+    | - Business logic validation
+    | - API documentation (OpenAPI)
+    | - System workflows
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | PLATFORM METADATA
+    |--------------------------------------------------------------------------
+    |
+    | Core platform identification and global settings
+    |
+    */
     'meta' => [
         'name' => 'ShiftPilot',
-        'version' => '2.1.1', // Updated version
+        'version' => '2.1.1',
         'currency' => 'GBP',
         'default_timezone' => 'UTC+01:00',
         'audit_retention_days' => 365,
@@ -23,10 +38,15 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | ENTITIES - REFINED STRUCTURE
+    | DATABASE RESOURCES (TABLES)
     |--------------------------------------------------------------------------
+    |
+    | Defines all database tables with their fields, relationships, 
+    | indexes, and validation rules. Each resource represents a database table.
+    |
     */
-    'entities' => [
+
+    'resources' => [
 
         /*
         |--------------------------------------------------------------------------
@@ -130,7 +150,7 @@ return [
         |--------------------------------------------------------------------------
         */
         'agency_branch' => [
-            'table' => 'branches',
+            'table' => 'agency_branches',
             'fields' => [
                 'id' => ['type' => 'increments'],
                 'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
@@ -211,7 +231,7 @@ return [
                 'id' => ['type' => 'increments'],
                 'user_id' => ['type' => 'foreign', 'references' => 'users,id'],
                 'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
-                'branch_id' => ['type' => 'foreign', 'references' => 'branches,id', 'nullable' => true],
+                'agency_branch_id' => ['type' => 'foreign', 'references' => 'branches,id', 'nullable' => true],
                 'permissions' => ['type' => 'json', 'nullable' => true],
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
@@ -500,7 +520,7 @@ return [
             'fields' => [
                 'id' => ['type' => 'increments'],
                 'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
-                'branch_id' => ['type' => 'foreign', 'references' => 'branches,id', 'nullable' => true],
+                'agency_branch_id' => ['type' => 'foreign', 'references' => 'branches,id', 'nullable' => true],
                 'employee_id' => ['type' => 'foreign', 'references' => 'employees,id'],
                 'position' => ['type' => 'string', 'nullable' => true],
                 'pay_rate' => ['type' => 'decimal', 'precision' => 8, 'scale' => 2],
@@ -887,7 +907,8 @@ return [
                 'id' => ['type' => 'increments'],
                 'shift_id' => ['type' => 'foreign', 'references' => 'shifts,id'],
                 'agency_employee_id' => ['type' => 'foreign', 'references' => 'agency_employees,id'],
-                'offered_by_id' => ['type' => 'foreign', 'references' => 'users,id'],
+                'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id'],
+                'agent_id' => ['type' => 'foreign', 'references' => 'agents,id'],
                 'status' => ['type' => 'string', 'default' => 'pending'],
                 'expires_at' => ['type' => 'timestamp'],
                 'responded_at' => ['type' => 'timestamp', 'nullable' => true],
@@ -898,14 +919,28 @@ return [
             'validation' => [
                 'shift_id' => 'required|exists:shifts,id',
                 'agency_employee_id' => 'required|exists:agency_employees,id',
-                'offered_by_id' => 'required|exists:users,id',
-                'status' => 'required|in:pending,accepted,rejected,expired'
+                'agency_id' => 'required|exists:agencies,id',
+                'agent_id' => 'required|exists:agents,id',
+                'status' => 'required|in:pending,accepted,rejected,expired,cancelled'
             ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'Shift'],
                 ['type' => 'belongsTo', 'related' => 'AgencyEmployee'],
-                ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'offered_by_id']
+                ['type' => 'belongsTo', 'related' => 'Agency'],
+                ['type' => 'belongsTo', 'related' => 'Agent', 'foreign_key' => 'agent_id']
             ],
+            'indexes' => [
+                ['fields' => ['shift_id', 'agency_employee_id'], 'unique' => true],
+                ['fields' => ['agency_id', 'status']],
+                ['fields' => ['agent_id']],
+                ['fields' => ['expires_at']]
+            ],
+            'business_rules' => [
+                'agency_consistency' => 'Agent must belong to the same agency as the agency_employee',
+                'no_duplicate_offers' => 'Only one active offer per shift per agency_employee',
+                'offer_expiry' => 'Offers automatically expire at expires_at',
+                'shift_availability' => 'Shift must be available and not assigned when offering'
+            ]
         ],
 
         /*
@@ -1223,8 +1258,7 @@ return [
             'table' => 'system_notifications',
             'fields' => [
                 'id' => ['type' => 'increments'],
-                'recipient_type' => ['type' => 'string'],
-                'recipient_id' => ['type' => 'integer'],
+                'user_id' => ['type' => 'foreign', 'references' => 'users,id'],
                 'channel' => ['type' => 'string', 'default' => 'in_app'],
                 'template_key' => ['type' => 'string'],
                 'payload' => ['type' => 'json', 'nullable' => true],
@@ -1233,6 +1267,119 @@ return [
                 'created_at' => ['type' => 'timestamp'],
                 'updated_at' => ['type' => 'timestamp']
             ],
+            'validation' => [
+                'user_id' => 'required|exists:users,id',
+                'channel' => 'required|in:in_app,email,sms,push',
+                'template_key' => 'required|string|max:255',
+                'is_read' => 'boolean',
+                'sent_at' => 'nullable|date'
+            ],
+            'relationships' => [
+                ['type' => 'belongsTo', 'related' => 'User']
+            ],
+            'indexes' => [
+                ['fields' => ['user_id']],
+                ['fields' => ['channel']],
+                ['fields' => ['is_read']],
+                ['fields' => ['sent_at']],
+                ['fields' => ['created_at']]
+            ],
+            'business_rules' => [
+                'delivery_retry' => 'Failed notifications should be retried up to 3 times',
+                'read_tracking' => 'Mark as read when user interacts with notification',
+                'channel_fallback' => 'Fallback to email if push notification fails'
+            ]
+        ],
+        'message' => [
+            'table' => 'messages',
+            'fields' => [
+                'id' => ['type' => 'increments'],
+                'conversation_id' => ['type' => 'foreign', 'references' => 'conversations,id'],
+                'sender_id' => ['type' => 'foreign', 'references' => 'users,id'],
+                'content' => ['type' => 'text'],
+                'message_type' => ['type' => 'string', 'default' => 'text'], // text, image, file, system
+                'attachments' => ['type' => 'json', 'nullable' => true],
+                'is_read' => ['type' => 'boolean', 'default' => false],
+                'read_at' => ['type' => 'timestamp', 'nullable' => true],
+                'created_at' => ['type' => 'timestamp'],
+                'updated_at' => ['type' => 'timestamp']
+            ],
+            'validation' => [
+                'conversation_id' => 'required|exists:conversations,id',
+                'sender_id' => 'required|exists:users,id',
+                'content' => 'required|string|max:5000',
+                'message_type' => 'required|in:text,image,file,system'
+            ],
+            'relationships' => [
+                ['type' => 'belongsTo', 'related' => 'Conversation'],
+                ['type' => 'belongsTo', 'related' => 'User', 'foreign_key' => 'sender_id'],
+                ['type' => 'hasMany', 'related' => 'MessageRecipient']
+            ]
+        ],
+
+        'conversation' => [
+            'table' => 'conversations',
+            'fields' => [
+                'id' => ['type' => 'increments'],
+                'title' => ['type' => 'string', 'nullable' => true], // Optional group chat title
+                'conversation_type' => ['type' => 'string', 'default' => 'direct'], // direct, group, shift, assignment
+                'context_type' => ['type' => 'string', 'nullable' => true], // shift, assignment, etc.
+                'context_id' => ['type' => 'integer', 'nullable' => true],
+                'last_message_id' => ['type' => 'foreign', 'references' => 'messages,id', 'nullable' => true],
+                'last_message_at' => ['type' => 'timestamp', 'nullable' => true],
+                'created_at' => ['type' => 'timestamp'],
+                'updated_at' => ['type' => 'timestamp']
+            ],
+            'relationships' => [
+                ['type' => 'hasMany', 'related' => 'Message'],
+                ['type' => 'belongsTo', 'related' => 'Message', 'foreign_key' => 'last_message_id'],
+                ['type' => 'hasMany', 'related' => 'ConversationParticipant'],
+                ['type' => 'morphTo', 'name' => 'context'] // Optional: link to shift, assignment, etc.
+            ]
+        ],
+
+        'conversation_participant' => [
+            'table' => 'conversation_participants',
+            'fields' => [
+                'id' => ['type' => 'increments'],
+                'conversation_id' => ['type' => 'foreign', 'references' => 'conversations,id'],
+                'user_id' => ['type' => 'foreign', 'references' => 'users,id'],
+                'role' => ['type' => 'string', 'default' => 'participant'], // participant, admin
+                'joined_at' => ['type' => 'timestamp'],
+                'left_at' => ['type' => 'timestamp', 'nullable' => true],
+                'muted_until' => ['type' => 'timestamp', 'nullable' => true]
+            ],
+            'validation' => [
+                'conversation_id' => 'required|exists:conversations,id',
+                'user_id' => 'required|exists:users,id',
+                'role' => 'required|in:participant,admin'
+            ],
+            'relationships' => [
+                ['type' => 'belongsTo', 'related' => 'Conversation'],
+                ['type' => 'belongsTo', 'related' => 'User']
+            ],
+            'indexes' => [
+                ['fields' => ['conversation_id', 'user_id'], 'unique' => true]
+            ]
+        ],
+
+        'message_recipient' => [
+            'table' => 'message_recipients',
+            'fields' => [
+                'id' => ['type' => 'increments'],
+                'message_id' => ['type' => 'foreign', 'references' => 'messages,id'],
+                'user_id' => ['type' => 'foreign', 'references' => 'users,id'],
+                'is_read' => ['type' => 'boolean', 'default' => false],
+                'read_at' => ['type' => 'timestamp', 'nullable' => true]
+            ],
+            'relationships' => [
+                ['type' => 'belongsTo', 'related' => 'Message'],
+                ['type' => 'belongsTo', 'related' => 'User']
+            ],
+            'indexes' => [
+                ['fields' => ['message_id', 'user_id'], 'unique' => true],
+                ['fields' => ['user_id', 'is_read']]
+            ]
         ],
 
         /*
@@ -1930,6 +2077,551 @@ return [
     'retention' => [
         'audit_logs_days' => env('AUDIT_LOG_RETENTION_DAYS', 365),
         'invoice_storage_days' => env('INVOICE_STORAGE_DAYS', 2555), // 7 years
+        'timesheet_storage_days' => env('TIMESHEET_STORAGE_DAYS', 2555),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | BUSINESS RULES & VALIDATION
+    |--------------------------------------------------------------------------
+    |
+    | Core business logic constraints and validation rules that govern
+    | system behavior and data integrity.
+    |
+    */
+    'business_rules' => [
+        'core_relationship_model' => [
+            'rule' => 'ALL employee-employer relationships MUST be mediated through agency_employees → assignments',
+            'enforcement' => 'Database constraints + application validation',
+            'description' => 'No direct employee-employer relationships allowed'
+        ],
+        'assignment_prerequisites' => [
+            'rule' => 'Assignment requires: active EmployerAgencyContract + active AgencyEmployee + valid Location + accepted AgencyResponse',
+            'enforcement' => 'Foreign key constraints + application validation',
+            'description' => 'Cannot assign employee without valid contract, agency registration, and accepted response'
+        ],
+        'assignment_creation_flow' => [
+            'rule' => 'Assignment must be created from accepted AgencyResponse with matching terms',
+            'enforcement' => 'Application validation + database constraints',
+            'description' => 'Prevents orphaned assignments without proper agency response context'
+        ],
+        'shift_to_assignment_link' => [
+            'rule' => 'All shifts must belong to an active assignment',
+            'enforcement' => 'Foreign key constraint + application validation',
+            'description' => 'Ensures shifts have proper assignment context'
+        ],
+        'employee_availability_scope' => [
+            'rule' => 'Employee availability and time-off apply across ALL agencies',
+            'enforcement' => 'Global validation checks',
+            'description' => 'Prevents double-booking regardless of agency'
+        ],
+        'shift_overlap_prevention' => [
+            'rule' => 'Employee cannot have overlapping shifts across ALL assignments and agencies',
+            'enforcement' => 'Application validation before shift creation',
+            'query' => 'Check shifts across all agency_employee relationships',
+            'description' => 'Global overlap prevention for employee time'
+        ],
+        'assignment_overlap_prevention' => [
+            'rule' => 'Employee cannot have overlapping active assignments',
+            'enforcement' => 'Application validation before assignment creation',
+            'description' => 'Prevents conflicting long-term placements across agencies'
+        ],
+        'multi_agency_employee_management' => [
+            'rule' => 'Employee can have multiple active agency relationships with independent terms',
+            'enforcement' => 'Application logic',
+            'description' => 'Support flexible staffing across multiple agencies'
+        ],
+        'rate_integrity' => [
+            'rule' => 'Assignment agreed_rate >= pay_rate, markup calculated automatically, agreed_rate should match agency_response.proposed_rate',
+            'enforcement' => 'Application validation + database triggers',
+            'description' => 'Ensures proper financial structure and consistency with agency response'
+        ],
+        'agency_response_integrity' => [
+            'rule' => 'Agency response proposed_rate cannot exceed shift_request.max_hourly_rate',
+            'enforcement' => 'Application validation',
+            'description' => 'Maintains pricing boundaries set by employer'
+        ],
+        'timesheet_approval_flow' => [
+            'rule' => 'Timesheets require both agency and employer approval before invoicing',
+            'enforcement' => 'Workflow state management',
+            'description' => 'Ensures dual approval for all worked hours'
+        ],
+        'invoice_generation_rules' => [
+            'rule' => 'Invoices generated only for employer_approved timesheets with completed shifts',
+            'enforcement' => 'Application validation + scheduled jobs',
+            'description' => 'Prevents invoicing for unapproved or incomplete work'
+        ]
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | DATA FLOW & WORKFLOWS
+    |--------------------------------------------------------------------------
+    |
+    | Defines how data moves through the system and key business processes.
+    |
+    */
+    'data_flow' => [
+        'employee_registration' => [
+            '1' => 'Employee creates base profile (no employer context)',
+            '2' => 'Agency registers employee via agency_employees with agency-specific terms',
+            '3' => 'Employee can be registered with multiple agencies simultaneously',
+            '4' => 'Each agency-employee relationship has independent pay rates and terms'
+        ],
+
+        'assignment_creation' => [
+            '1' => 'Employer creates ShiftRequest for staffing need',
+            '2' => 'Agencies with active contracts can view and respond',
+            '3' => 'Agency submits AgencyResponse with proposed employee, rates, and dates',
+            '4' => 'Employer reviews and accepts preferred AgencyResponse',
+            '5' => 'System validates: active contract + available employee + no conflicts',
+            '6' => 'System creates Assignment linking AgencyResponse to AgencyEmployee via Contract',
+            '7' => 'Shifts generated within assignment date boundaries',
+            '8' => 'Assignment terms (rates, dates) inherited from accepted AgencyResponse'
+        ],
+
+        'multi_agency_scenario' => [
+            'employee_john' => [
+                'registered_with' => ['Agency A', 'Agency B'],
+                'assignment_agency_a' => 'Employer X (Mon-Wed)',
+                'assignment_agency_b' => 'Employer Y (Thu-Fri)',
+                'validation' => 'System prevents overlapping shifts across both assignments'
+            ]
+        ],
+
+        'financial_flow' => [
+            '1' => 'Employee works shifts, timesheets created',
+            '2' => 'Timesheets approved by employer contact',
+            '3' => 'Invoice generated (Employer → Agency) for agreed_rate × hours',
+            '4' => 'Employer pays invoice to agency',
+            '5' => 'Agency processes payroll (Agency → Employee) for pay_rate × hours',
+            '6' => 'Platform commission invoiced (Agency → Platform)',
+            '7' => 'Each agency manages payroll independently for their employees'
+        ]
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATION QUERIES
+    |--------------------------------------------------------------------------
+    |
+    | Common SQL queries used for data validation and business rule enforcement.
+    |
+    */
+    'validation_queries' => [
+        'check_global_shift_overlap' => "
+            SELECT COUNT(*) FROM shifts s
+            JOIN assignments a ON s.assignment_id = a.id
+            JOIN agency_employees ae ON a.agency_employee_id = ae.id
+            WHERE ae.employee_id = :employee_id
+            AND s.id != :exclude_shift_id
+            AND s.start_time < :new_end_time
+            AND s.end_time > :new_start_time
+            AND s.status NOT IN ('cancelled', 'no_show')
+        ",
+
+        'check_global_assignment_overlap' => "
+            SELECT COUNT(*) FROM assignments a
+            JOIN agency_employees ae ON a.agency_employee_id = ae.id
+            WHERE ae.employee_id = :employee_id
+            AND a.id != :exclude_assignment_id
+            AND a.status = 'active'
+            AND a.start_date <= COALESCE(:new_end_date, '9999-12-31')
+            AND (a.end_date IS NULL OR a.end_date >= :new_start_date)
+        ",
+
+        'get_employee_agency_context' => "
+            SELECT
+                ae.id as agency_employee_id,
+                ae.agency_id,
+                a.name as agency_name,
+                ae.pay_rate,
+                ae.status as agency_status,
+                ae.employment_type
+            FROM agency_employees ae
+            JOIN agencies a ON ae.agency_id = a.id
+            WHERE ae.employee_id = :employee_id
+            AND ae.status = 'active'
+        ",
+
+        'get_available_employees_for_shift_global' => "
+            SELECT DISTINCT
+                e.*,
+                ae.id as agency_employee_id,
+                ae.agency_id,
+                ae.pay_rate as agency_pay_rate
+            FROM employees e
+            JOIN agency_employees ae ON e.id = ae.employee_id
+            WHERE ae.agency_id = :agency_id
+            AND ae.status = 'active'
+            AND e.status = 'active'
+            AND e.id NOT IN (
+                -- Exclude employees with overlapping shifts (any agency)
+                SELECT ae2.employee_id
+                FROM agency_employees ae2
+                JOIN assignments a ON ae2.id = a.agency_employee_id
+                JOIN shifts s ON a.id = s.assignment_id
+                WHERE s.start_time < :shift_end_time
+                AND s.end_time > :shift_start_time
+                AND s.status NOT IN ('cancelled', 'no_show')
+            )
+            AND e.id NOT IN (
+                -- Exclude employees with approved time off
+                SELECT employee_id FROM time_off_requests
+                WHERE status = 'approved'
+                AND start_date <= :shift_end_date
+                AND end_date >= :shift_start_date
+            )
+        ",
+
+        'calculate_employee_utilization' => "
+            SELECT
+                e.id as employee_id,
+                ae.agency_id,
+                COUNT(DISTINCT a.id) as active_assignments,
+                COUNT(DISTINCT s.id) as scheduled_shifts,
+                SUM(EXTRACT(EPOCH FROM (s.end_time - s.start_time))/3600 as scheduled_hours
+            FROM employees e
+            JOIN agency_employees ae ON e.id = ae.employee_id
+            LEFT JOIN assignments a ON ae.id = a.agency_employee_id AND a.status = 'active'
+            LEFT JOIN shifts s ON a.id = s.assignment_id
+                AND s.status IN ('scheduled', 'in_progress')
+                AND s.start_time >= :period_start
+                AND s.end_time <= :period_end
+            WHERE e.id = :employee_id
+            GROUP BY e.id, ae.agency_id
+        "
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | SYSTEM EVENTS
+    |--------------------------------------------------------------------------
+    |
+    | Domain events that can be emitted by the system for notifications,
+    | auditing, and integrations.
+    |
+    */
+    'events' => [
+        'shift_request.created' => ['description' => 'Employer created shift request'],
+        'shift_request.published' => ['description' => 'Shift request made available to agencies'],
+        'agency_response.submitted' => ['description' => 'Agency submitted proposal for shift request'],
+        'agency_response.accepted' => ['description' => 'Employer accepted agency proposal'],
+        'agency_response.rejected' => ['description' => 'Employer rejected agency proposal'],
+        'assignment.created' => ['description' => 'Employee assigned to employer via agency'],
+        'assignment.completed' => ['description' => 'Assignment period ended'],
+        'assignment.cancelled' => ['description' => 'Assignment cancelled'],
+        'shift.created' => ['description' => 'Shift scheduled for assignment'],
+        'shift.completed' => ['description' => 'Employee completed shift'],
+        'shift.cancelled' => ['description' => 'Shift cancelled'],
+        'shift_offer.sent' => ['description' => 'Agency offered shift to employee'],
+        'shift_offer.accepted' => ['description' => 'Employee accepted shift offer'],
+        'shift_offer.rejected' => ['description' => 'Employee rejected shift offer'],
+        'timesheet.submitted' => ['description' => 'Timesheet submitted for approval'],
+        'timesheet.agency_approved' => ['description' => 'Agency approved timesheet'],
+        'timesheet.employer_approved' => ['description' => 'Employer approved timesheet'],
+        'invoice.generated' => ['description' => 'Invoice created for services'],
+        'invoice.paid' => ['description' => 'Invoice payment received'],
+        'payroll.generated' => ['description' => 'Payroll records created'],
+        'payout.processed' => ['description' => 'Payout batch processed to employees'],
+        'availability.updated' => ['description' => 'Employee availability updated'],
+        'time_off.requested' => ['description' => 'Employee requested time off'],
+        'time_off.approved' => ['description' => 'Time off request approved'],
+        'time_off.rejected' => ['description' => 'Time off request rejected'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | WORKFLOW FLOWS
+    |--------------------------------------------------------------------------
+    |
+    | Detailed step-by-step workflows for key business processes.
+    |
+    */
+    'flows' => [
+        'full_shift_lifecycle' => [
+            [
+                'step' => 'employer_creates_shift_request',
+                'actor' => 'employer_admin',
+                'emit' => 'shift_request.created',
+                'jobs' => ['ValidateShiftRequest', 'IdentifyEligibleAgencies'],
+                'notifications' => []
+            ],
+            [
+                'step' => 'employer_publishes_request',
+                'actor' => 'employer_admin',
+                'emit' => 'shift_request.published',
+                'jobs' => ['NotifyAgencies', 'SetResponseDeadline'],
+                'notifications' => ['shift_request.published:agency']
+            ],
+            [
+                'step' => 'agency_submits_response',
+                'actor' => 'agent',
+                'emit' => 'agency_response.submitted',
+                'jobs' => ['ValidateProposedEmployee', 'CalculateMarkup', 'CheckAvailability'],
+                'notifications' => ['agency_response.submitted:employer']
+            ],
+            [
+                'step' => 'employer_accepts_response',
+                'actor' => 'employer_admin',
+                'emit' => 'agency_response.accepted',
+                'jobs' => ['CreateAssignment', 'GenerateShifts', 'NotifyAgency'],
+                'notifications' => ['agency_response.accepted:agency', 'assignment.created:employee']
+            ],
+            [
+                'step' => 'employee_works_shift',
+                'actor' => 'employee',
+                'emit' => 'shift.completed',
+                'jobs' => ['CreateTimesheet', 'CalculateHours'],
+                'notifications' => ['timesheet.submitted:agency']
+            ],
+            [
+                'step' => 'agency_approves_timesheet',
+                'actor' => 'agent',
+                'emit' => 'timesheet.agency_approved',
+                'jobs' => ['ValidateHours', 'NotifyEmployer'],
+                'notifications' => ['timesheet.agency_approved:employer']
+            ],
+            [
+                'step' => 'employer_approves_timesheet',
+                'actor' => 'contact',
+                'emit' => 'timesheet.employer_approved',
+                'jobs' => ['FinalizeTimesheet', 'GenerateInvoice'],
+                'notifications' => ['timesheet.employer_approved:agency', 'invoice.generated:employer']
+            ],
+            [
+                'step' => 'employer_pays_invoice',
+                'actor' => 'employer_admin',
+                'emit' => 'invoice.paid',
+                'jobs' => ['RecordPayment', 'CalculatePlatformFee', 'TriggerPayroll'],
+                'notifications' => ['invoice.paid:agency']
+            ],
+            [
+                'step' => 'agency_processes_payroll',
+                'actor' => 'system',
+                'emit' => 'payroll.generated',
+                'jobs' => ['CreatePayrollRecords', 'CalculateTaxes'],
+                'notifications' => ['payroll.generated:employee']
+            ],
+            [
+                'step' => 'agency_executes_payout',
+                'actor' => 'system',
+                'emit' => 'payout.processed',
+                'jobs' => ['BatchPayments', 'UpdatePayrollStatus'],
+                'notifications' => ['payout.processed:employee']
+            ],
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | USER ROLES & PERMISSIONS
+    |--------------------------------------------------------------------------
+    |
+    | Defines user roles and their associated permissions within the system.
+    |
+    */
+    'user_roles' => [
+        'super_admin' => [
+            'label' => 'Super Admin',
+            'description' => 'Full platform access',
+            'permissions' => ['*']
+        ],
+        'agency_admin' => [
+            'label' => 'Agency Admin',
+            'description' => 'Manage agency operations, employees, assignments',
+            'permissions' => [
+                'agency_employee:*',
+                'agent:*',
+                'assignment:*',
+                'shift:view,create,update',
+                'timesheet:*',
+                'invoice:view,create',
+                'payroll:*',
+                'payout:*',
+                'agency_response:*',
+                'availability:view',
+                'time_off:approve',
+            ]
+        ],
+        'agent' => [
+            'label' => 'Agent',
+            'description' => 'Manage assignments and shifts for agency',
+            'permissions' => [
+                'agency_employee:view',
+                'assignment:view,create,update',
+                'shift:view,create,update',
+                'shift_offer:*',
+                'agency_response:create,view',
+                'timesheet:view,approve',
+            ]
+        ],
+        'employer_admin' => [
+            'label' => 'Employer Admin',
+            'description' => 'Manage shift requests, approve timesheets, pay invoices',
+            'permissions' => [
+                'shift_request:*',
+                'agency_response:view',
+                'assignment:view',
+                'shift:view',
+                'contact:*',
+                'location:*',
+                'timesheet:approve,view',
+                'invoice:view,pay',
+            ]
+        ],
+        'contact' => [
+            'label' => 'Employer Contact',
+            'description' => 'Approve timesheets and shifts on-site',
+            'permissions' => [
+                'timesheet:approve,view',
+                'shift:approve,view',
+                'shift_approval:create',
+            ]
+        ],
+        'employee' => [
+            'label' => 'Employee',
+            'description' => 'View assignments, work shifts, manage availability',
+            'permissions' => [
+                'assignment:view:own',
+                'shift:view:own',
+                'shift_offer:respond:own',
+                'timesheet:create:own,view:own',
+                'availability:manage:own',
+                'time_off:request',
+                'agency_employee:view:own',
+            ]
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | SCHEDULING CONFIGURATION
+    |--------------------------------------------------------------------------
+    |
+    | Rules and constraints for shift scheduling and availability management.
+    |
+    */
+    'scheduling' => [
+        'overlap_prevention' => [
+            'enabled' => true,
+            'check_across_all_agencies' => true,
+            'check_time_off_requests' => true,
+            'buffer_minutes' => 0,
+        ],
+        'availability' => [
+            'default_timezone' => 'UTC',
+            'min_shift_notice_hours' => 24,
+            'max_shift_length_hours' => 12,
+            'min_shift_length_hours' => 2,
+            'break_required_after_hours' => 6,
+            'break_minutes' => 30,
+            'max_consecutive_days' => 7,
+            'min_rest_hours_between_shifts' => 11,
+        ],
+        'matching' => [
+            'consider_availability' => true,
+            'consider_qualifications' => true,
+            'consider_location_preference' => true,
+            'max_travel_distance_km' => 50,
+            'prefer_employees_with_history' => true,
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | NOTIFICATION TEMPLATES
+    |--------------------------------------------------------------------------
+    |
+    | Templates and channels for system notifications.
+    |
+    */
+    'notification_templates' => [
+        'shift_request.published:agency' => ['channels' => ['email', 'in_app']],
+        'agency_response.submitted:employer' => ['channels' => ['email', 'in_app']],
+        'agency_response.accepted:agency' => ['channels' => ['email', 'in_app']],
+        'assignment.created:employee' => ['channels' => ['sms', 'email', 'in_app']],
+        'assignment.created:employer' => ['channels' => ['email', 'in_app']],
+        'shift.created:employee' => ['channels' => ['sms', 'email', 'in_app']],
+        'shift_offer.sent:employee' => ['channels' => ['sms', 'in_app']],
+        'timesheet.submitted:agency' => ['channels' => ['email', 'in_app']],
+        'timesheet.agency_approved:employer' => ['channels' => ['email', 'in_app']],
+        'timesheet.employer_approved:agency' => ['channels' => ['email', 'in_app']],
+        'invoice.generated:employer' => ['channels' => ['email']],
+        'invoice.paid:agency' => ['channels' => ['email']],
+        'payroll.generated:employee' => ['channels' => ['email', 'in_app']],
+        'payout.processed:employee' => ['channels' => ['email', 'in_app']],
+        'availability.updated:agency' => ['channels' => ['in_app']],
+        'time_off.requested:agency' => ['channels' => ['email', 'in_app']],
+        'time_off.approved:employee' => ['channels' => ['email', 'in_app']],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | PAYMENT CONFIGURATION
+    |--------------------------------------------------------------------------
+    |
+    | Payment processing settings and provider configurations.
+    |
+    */
+    'payments' => [
+        'providers' => [
+            'stripe' => [
+                'key' => env('STRIPE_KEY'),
+                'secret' => env('STRIPE_SECRET'),
+                'connect' => true
+            ],
+        ],
+        'default_provider' => env('PAYMENT_PROVIDER', 'stripe'),
+        'invoice_due_days' => env('INVOICE_DUE_DAYS', 14),
+        'platform_commission_rate' => env('PLATFORM_COMMISSION_RATE', 2.00),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | SECURITY & AUDIT
+    |--------------------------------------------------------------------------
+    |
+    | Security settings and audit configuration.
+    |
+    */
+    'security' => [
+        'audit_enabled' => true,
+        'password_policy' => [
+            'min_length' => 8,
+            'require_numbers' => true,
+            'require_special' => false
+        ],
+        'session_timeout_minutes' => 120,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | OPERATIONAL SETTINGS
+    |--------------------------------------------------------------------------
+    |
+    | System operational parameters and limits.
+    |
+    */
+    'ops' => [
+        'max_shift_lookahead_days' => 365,
+        'timesheet_edit_window_minutes' => 60,
+        'shift_offer_expiry_hours' => 24,
+        'auto_reject_expired_offers' => true,
+        'assignment_max_duration_days' => 365,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | DATA RETENTION
+    |--------------------------------------------------------------------------
+    |
+    | Data retention policies for compliance.
+    |
+    */
+    'retention' => [
+        'audit_logs_days' => env('AUDIT_LOG_RETENTION_DAYS', 365),
+        'invoice_storage_days' => env('INVOICE_STORAGE_DAYS', 2555),
         'timesheet_storage_days' => env('TIMESHEET_STORAGE_DAYS', 2555),
     ],
 

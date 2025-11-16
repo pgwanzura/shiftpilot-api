@@ -6,6 +6,8 @@ use App\Enums\ShiftOfferStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
+use Illuminate\Database\Eloquent\Builder;
 
 class ShiftOffer extends Model
 {
@@ -14,7 +16,8 @@ class ShiftOffer extends Model
     protected $fillable = [
         'shift_id',
         'agency_employee_id',
-        'offered_by_id',
+        'agency_id',
+        'agent_id',
         'status',
         'expires_at',
         'responded_at',
@@ -27,6 +30,26 @@ class ShiftOffer extends Model
         'status' => ShiftOfferStatus::class,
     ];
 
+    protected $appends = [
+        'is_expired',
+        'can_respond',
+    ];
+
+    protected static function booted()
+    {
+        static::creating(function ($offer) {
+            if (!$offer->agency_id && $offer->agent_id) {
+                $offer->agency_id = $offer->agent->agency_id;
+            }
+        });
+
+        static::saving(function ($offer) {
+            if ($offer->isDirty('status') && in_array($offer->status, ['accepted', 'rejected'])) {
+                $offer->responded_at = now();
+            }
+        });
+    }
+
     public function shift(): BelongsTo
     {
         return $this->belongsTo(Shift::class);
@@ -37,47 +60,92 @@ class ShiftOffer extends Model
         return $this->belongsTo(AgencyEmployee::class);
     }
 
-    public function offeredBy(): BelongsTo
+    public function agency(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'offered_by_id');
+        return $this->belongsTo(Agency::class);
+    }
+
+    public function agent(): BelongsTo
+    {
+        return $this->belongsTo(Agent::class);
+    }
+
+    public function employee(): HasOneThrough
+    {
+        return $this->hasOneThrough(
+            Employee::class,
+            AgencyEmployee::class,
+            'id',
+            'id',
+            'agency_employee_id',
+            'employee_id'
+        );
     }
 
     public function isPending(): bool
     {
-        return $this->status->isPending();
+        return $this->status === ShiftOfferStatus::PENDING;
     }
 
     public function isAccepted(): bool
     {
-        return $this->status->isAccepted();
+        return $this->status === ShiftOfferStatus::ACCEPTED;
     }
 
     public function isRejected(): bool
     {
-        return $this->status->isRejected();
+        return $this->status === ShiftOfferStatus::REJECTED;
     }
 
     public function isExpired(): bool
     {
-        return $this->status->isExpired();
+        return $this->status === ShiftOfferStatus::EXPIRED;
+    }
+
+    public function isCancelled(): bool
+    {
+        return $this->status === ShiftOfferStatus::CANCELLED;
+    }
+
+    protected function getIsExpiredAttribute(): bool
+    {
+        return $this->expires_at->isPast() && $this->isPending();
+    }
+
+    protected function getCanRespondAttribute(): bool
+    {
+        return $this->isPending() && !$this->getIsExpiredAttribute();
     }
 
     public function canBeAccepted(): bool
     {
-        return $this->status->canBeAccepted() && !$this->isExpired();
+        if (!$this->getCanRespondAttribute()) {
+            return false;
+        }
+
+        if (!$this->shift->isAvailable()) {
+            return false;
+        }
+
+        if (!$this->agencyEmployee->canAcceptNewAssignments()) {
+            return false;
+        }
+
+        return $this->validateAgencyConsistency();
     }
 
     public function canBeRejected(): bool
     {
-        return $this->status->canBeRejected() && !$this->isExpired();
+        return $this->getCanRespondAttribute();
     }
 
-    public function isExpiredByTime(): bool
+    public function canBeCancelled(): bool
     {
-        return $this->expires_at && now()->gt($this->expires_at) && $this->isPending();
+        
+        return $this->isPending() && $this->agent_id === auth()->id();
     }
 
-    public function accept(string $notes = null): bool
+    public function accept(?string $notes = null): bool
     {
         if (!$this->canBeAccepted()) {
             return false;
@@ -85,12 +153,11 @@ class ShiftOffer extends Model
 
         return $this->update([
             'status' => ShiftOfferStatus::ACCEPTED,
-            'responded_at' => now(),
             'response_notes' => $notes,
         ]);
     }
 
-    public function reject(string $notes = null): bool
+    public function reject(?string $notes = null): bool
     {
         if (!$this->canBeRejected()) {
             return false;
@@ -98,26 +165,36 @@ class ShiftOffer extends Model
 
         return $this->update([
             'status' => ShiftOfferStatus::REJECTED,
-            'responded_at' => now(),
             'response_notes' => $notes,
+        ]);
+    }
+
+    public function cancel(): bool
+    {
+        if (!$this->canBeCancelled()) {
+            return false;
+        }
+
+        return $this->update([
+            'status' => ShiftOfferStatus::CANCELLED,
         ]);
     }
 
     public function markAsExpired(): bool
     {
-        if (!$this->status->canExpire() || !$this->isExpiredByTime()) {
+        if (!$this->isPending() || !$this->getIsExpiredAttribute()) {
             return false;
         }
 
         return $this->update([
             'status' => ShiftOfferStatus::EXPIRED,
-            'responded_at' => now(),
         ]);
     }
 
-    public function getResponseDeadlineStatus(): string
+    public function validateAgencyConsistency(): bool
     {
-        return $this->status->getResponseDeadlineStatus($this->expires_at);
+        return $this->agent->agency_id === $this->agency_id &&
+            $this->agencyEmployee->agency_id === $this->agency_id;
     }
 
     public function scopePending($query)
@@ -140,18 +217,57 @@ class ShiftOffer extends Model
         return $query->where('status', ShiftOfferStatus::EXPIRED);
     }
 
+    public function scopeCancelled($query)
+    {
+        return $query->where('status', ShiftOfferStatus::CANCELLED);
+    }
+
     public function scopeActive($query)
     {
         return $query->where('status', ShiftOfferStatus::PENDING)
-            ->where(function ($q) {
-                $q->whereNull('expires_at')
-                    ->orWhere('expires_at', '>', now());
-            });
+            ->where('expires_at', '>', now());
+    }
+
+    public function scopeExpiringSoon($query, $hours = 24)
+    {
+        return $query->where('status', ShiftOfferStatus::PENDING)
+            ->whereBetween('expires_at', [now(), now()->addHours($hours)]);
+    }
+
+    public function scopeForAgency($query, $agencyId)
+    {
+        return $query->where('agency_id', $agencyId);
+    }
+
+    public function scopeForAgent($query, $agentId)
+    {
+        return $query->where('agent_id', $agentId);
+    }
+
+    public function scopeForAgencyEmployee($query, $agencyEmployeeId)
+    {
+        return $query->where('agency_employee_id', $agencyEmployeeId);
+    }
+
+    public function scopeForShift($query, $shiftId)
+    {
+        return $query->where('shift_id', $shiftId);
     }
 
     public function scopeRequiringAction($query)
     {
         return $query->where('status', ShiftOfferStatus::PENDING)
             ->where('expires_at', '>', now());
+    }
+
+    public function scopeVisibleToAgency(Builder $query, int $agencyId): Builder
+    {
+        return $query->where('agency_id', $agencyId);
+    }
+
+    public function scopeVisibleToAgent(Builder $query, int $agentId): Builder
+    {
+        $agent = Agent::find($agentId);
+        return $query->where('agency_id', $agent->agency_id);
     }
 }

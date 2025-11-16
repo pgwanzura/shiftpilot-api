@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Support\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 
 class Shift extends Model
 {
@@ -17,6 +18,7 @@ class Shift extends Model
 
     protected $fillable = [
         'assignment_id',
+        'location_id',
         'shift_date',
         'start_time',
         'end_time',
@@ -51,10 +53,7 @@ class Shift extends Model
             }
 
             if (!$shift->hourly_rate && $shift->assignment_id) {
-                $assignment = Assignment::find($shift->assignment_id);
-                if ($assignment) {
-                    $shift->hourly_rate = $assignment->pay_rate;
-                }
+                $shift->hourly_rate = $shift->assignment->pay_rate;
             }
         });
 
@@ -63,6 +62,67 @@ class Shift extends Model
                 $shift->shift_date = $shift->start_time->toDateString();
             }
         });
+    }
+
+    public function assignment(): BelongsTo
+    {
+        return $this->belongsTo(Assignment::class);
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class);
+    }
+
+    public function timesheet(): HasOne
+    {
+        return $this->hasOne(Timesheet::class);
+    }
+
+    public function shiftApprovals(): HasMany
+    {
+        return $this->hasMany(ShiftApproval::class);
+    }
+
+    public function shiftOffers(): HasMany
+    {
+        return $this->hasMany(ShiftOffer::class);
+    }
+
+    public function employee()
+    {
+        return $this->hasOneThrough(
+            Employee::class,
+            AgencyEmployee::class,
+            'id',
+            'id',
+            'assignment.agency_employee_id',
+            'employee_id'
+        );
+    }
+
+    public function agency()
+    {
+        return $this->hasOneThrough(
+            Agency::class,
+            Assignment::class,
+            'id',
+            'id',
+            'assignment_id',
+            'agency_id'
+        );
+    }
+
+    public function employer()
+    {
+        return $this->hasOneThrough(
+            Employer::class,
+            Assignment::class,
+            'id',
+            'id',
+            'assignment_id',
+            'employer_id'
+        );
     }
 
     public function loadRelations(): self
@@ -292,6 +352,11 @@ class Shift extends Model
         });
     }
 
+    public function scopeForLocation($query, $locationId)
+    {
+        return $query->where('location_id', $locationId);
+    }
+
     public function scopeDateRange($query, $startDate, $endDate = null)
     {
         return $query->whereBetween('shift_date', [
@@ -336,65 +401,17 @@ class Shift extends Model
         return $query;
     }
 
-    public function assignment(): BelongsTo
+    public function scopeVisibleToAgency(Builder $query, int $agencyId): Builder
     {
-        return $this->belongsTo(Assignment::class);
+        return $query->whereHas('assignment.contract.agency', function (Builder $q) use ($agencyId) {
+            $q->where('id', $agencyId);
+        });
     }
 
-    public function location(): BelongsTo
+    public function scopeVisibleToAgent(Builder $query, int $agentId): Builder
     {
-        return $this->belongsTo(Location::class);
-    }
-
-    public function timesheet(): HasOne
-    {
-        return $this->hasOne(Timesheet::class);
-    }
-
-    public function shiftApprovals(): HasMany
-    {
-        return $this->hasMany(ShiftApproval::class);
-    }
-
-    public function shiftOffers(): HasMany
-    {
-        return $this->hasMany(ShiftOffer::class);
-    }
-
-    public function employee()
-    {
-        return $this->hasOneThrough(
-            Employee::class,
-            AgencyEmployee::class,
-            'id',
-            'id',
-            'assignment.agency_employee_id',
-            'employee_id'
-        );
-    }
-
-    public function agency()
-    {
-        return $this->hasOneThrough(
-            Agency::class,
-            Assignment::class,
-            'id',
-            'id',
-            'assignment_id',
-            'agency_id'
-        );
-    }
-
-    public function employer()
-    {
-        return $this->hasOneThrough(
-            Employer::class,
-            Assignment::class,
-            'id',
-            'id',
-            'assignment_id',
-            'employer_id'
-        );
+        $agent = Agent::find($agentId);
+        return $this->scopeVisibleToAgency($query, $agent->agency_id);
     }
 
     private function hasTimeOffConflict(int $employeeId, Carbon $shiftDate): bool

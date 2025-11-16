@@ -8,24 +8,27 @@ enum ShiftOfferStatus: string
     case ACCEPTED = 'accepted';
     case REJECTED = 'rejected';
     case EXPIRED = 'expired';
+    case CANCELLED = 'cancelled';
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PENDING => 'Pending',
             self::ACCEPTED => 'Accepted',
             self::REJECTED => 'Rejected',
             self::EXPIRED => 'Expired',
+            self::CANCELLED => 'Cancelled',
         };
     }
 
     public function color(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PENDING => 'orange',
             self::ACCEPTED => 'green',
             self::REJECTED => 'red',
             self::EXPIRED => 'gray',
+            self::CANCELLED => 'yellow',
         };
     }
 
@@ -52,6 +55,11 @@ enum ShiftOfferStatus: string
     public function isActive(): bool
     {
         return $this === self::PENDING;
+    }
+
+    public function isCancelled(): bool
+    {
+        return $this === self::CANCELLED;
     }
 
     public function isFinal(): bool
@@ -127,7 +135,7 @@ enum ShiftOfferStatus: string
 
     public function getTransitionTargets(): array
     {
-        return match($this) {
+        return match ($this) {
             self::PENDING => [self::ACCEPTED, self::REJECTED, self::EXPIRED],
             self::ACCEPTED => [],
             self::REJECTED => [],
@@ -142,7 +150,7 @@ enum ShiftOfferStatus: string
 
     public function getNextActions(): array
     {
-        return match($this) {
+        return match ($this) {
             self::PENDING => ['accept', 'reject', 'expire'],
             self::ACCEPTED => [],
             self::REJECTED => [],
@@ -152,7 +160,7 @@ enum ShiftOfferStatus: string
 
     public function getNotificationEvent(): ?string
     {
-        return match($this) {
+        return match ($this) {
             self::PENDING => 'shift_offer.sent',
             self::ACCEPTED => 'shift_offer.accepted',
             self::REJECTED => 'shift_offer.rejected',
@@ -182,7 +190,7 @@ enum ShiftOfferStatus: string
         }
 
         $expiry = \Carbon\Carbon::parse($expiresAt);
-        
+
         if ($this->isFinal()) {
             return 'responded';
         }

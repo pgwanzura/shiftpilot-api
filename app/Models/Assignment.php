@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Casts\Attribute;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\Builder;
 
 class Assignment extends Model
 {
@@ -113,7 +113,7 @@ class Assignment extends Model
             throw new \InvalidArgumentException('Agreed rate cannot be less than pay rate');
         }
 
-        if ($this->isDirty('status') && !$this->canChangeStatus($this->getOriginal('status'), $this->status)) {
+        if ($this->isDirty('status') && !$this->canChangeStatus($this->getOriginal('status')->value, $this->status->value)) {
             throw new \InvalidArgumentException('Invalid assignment status transition');
         }
     }
@@ -409,6 +409,19 @@ class Assignment extends Model
     public function scopeWithoutShifts($query)
     {
         return $query->whereDoesntHave('shifts');
+    }
+
+    public function scopeVisibleToAgency(Builder $query, int $agencyId): Builder
+    {
+        return $query->whereHas('contract.agency', function (Builder $q) use ($agencyId) {
+            $q->where('id', $agencyId);
+        });
+    }
+
+    public function scopeVisibleToAgent(Builder $query, int $agentId): Builder
+    {
+        $agent = Agent::find($agentId);
+        return $this->scopeVisibleToAgency($query, $agent->agency_id);
     }
 
     public function contract(): BelongsTo

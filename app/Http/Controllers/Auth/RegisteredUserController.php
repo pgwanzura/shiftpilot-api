@@ -4,49 +4,56 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\PermissionService;
+use App\Services\UserRoleService;
 use Illuminate\Auth\Events\Registered;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
 
 class RegisteredUserController extends Controller
 {
+    public function __construct(
+        private PermissionService $permissionService,
+        private UserRoleService $userRoleService
+    ) {}
+
     public function store(Request $request): JsonResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:' . User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'role' => ['required', 'string', 'in:employee,employer_admin,agency_admin,contact'],
-            'phone' => ['sometimes', 'string', 'max:20'],
-            'address_line1' => ['sometimes', 'string', 'max:255'],
-            'address_line2' => ['sometimes', 'string', 'max:255'],
-            'city' => ['sometimes', 'string', 'max:100'],
-            'county' => ['sometimes', 'string', 'max:100'],
-            'postcode' => ['sometimes', 'string', 'max:20'],
-            'country' => ['sometimes', 'string', 'size:2'],
-            'date_of_birth' => ['sometimes', 'date'],
-            'emergency_contact_name' => ['sometimes', 'string', 'max:255'],
-            'emergency_contact_phone' => ['sometimes', 'string', 'max:20'],
+            'role' => ['required', 'string', 'in:employee,employer_admin,agency_admin,contact,agent'],
+            'phone' => ['nullable', 'string', 'max:20'],
+            'address_line1' => ['nullable', 'string', 'max:255'],
+            'address_line2' => ['nullable', 'string', 'max:255'],
+            'city' => ['nullable', 'string', 'max:100'],
+            'county' => ['nullable', 'string', 'max:100'],
+            'postcode' => ['nullable', 'string', 'max:20'],
+            'country' => ['nullable', 'string', 'size:2'],
+            'date_of_birth' => ['nullable', 'date'],
+            'emergency_contact_name' => ['nullable', 'string', 'max:255'],
+            'emergency_contact_phone' => ['nullable', 'string', 'max:20'],
         ]);
 
         $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role' => $request->role,
-            'phone' => $request->phone ?? null,
-            'address_line1' => $request->address_line1 ?? null,
-            'address_line2' => $request->address_line2 ?? null,
-            'city' => $request->city ?? null,
-            'county' => $request->county ?? null,
-            'postcode' => $request->postcode ?? null,
-            'country' => $request->country ?? 'GB',
-            'date_of_birth' => $request->date_of_birth ?? null,
-            'emergency_contact_name' => $request->emergency_contact_name ?? null,
-            'emergency_contact_phone' => $request->emergency_contact_phone ?? null,
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'role' => $validated['role'],
+            'phone' => $validated['phone'] ?? null,
+            'address_line1' => $validated['address_line1'] ?? null,
+            'address_line2' => $validated['address_line2'] ?? null,
+            'city' => $validated['city'] ?? null,
+            'county' => $validated['county'] ?? null,
+            'postcode' => $validated['postcode'] ?? null,
+            'country' => $validated['country'] ?? 'GB',
+            'date_of_birth' => $validated['date_of_birth'] ?? null,
+            'emergency_contact_name' => $validated['emergency_contact_name'] ?? null,
+            'emergency_contact_phone' => $validated['emergency_contact_phone'] ?? null,
             'status' => 'active',
             'last_login_at' => now(),
         ]);
@@ -57,48 +64,64 @@ class RegisteredUserController extends Controller
         $this->loadRoleSpecificRelations($user);
 
         return response()->json([
-            'user' => $user,
-            'permissions' => $this->getUserPermissions($user),
-            'profile_complete' => $user->has_complete_profile,
-            'address_complete' => $user->has_complete_address,
+            'user' => $this->formatUserResponse($user),
             'message' => 'Registration successful'
         ], 201);
     }
 
-    protected function loadRoleSpecificRelations($user)
+    private function loadRoleSpecificRelations(User $user): void
     {
-        $relations = [];
+        $relation = match ($user->role) {
+            'agency_admin' => 'agency',
+            'employer_admin' => 'employerUser.employer',
+            'employee' => 'employee',
+            'contact' => 'contact.employer',
+            'agent' => 'agent.agency',
+            default => null
+        };
 
-        switch ($user->role) {
-            case 'agency_admin':
-                $relations[] = 'agency';
-                break;
-            case 'employer_admin':
-                $relations[] = 'employer';
-                break;
-            case 'employee':
-                $relations[] = 'employee';
-                break;
-            case 'contact':
-                $relations[] = 'contact';
-                break;
-        }
-
-        if (!empty($relations)) {
-            $user->load($relations);
+        if ($relation) {
+            $user->load($relation);
         }
     }
 
-    protected function getUserPermissions($user)
+    private function formatUserResponse(User $user): array
     {
         return [
-            'can_approve_timesheets' => $user->canApproveTimesheets(),
-            'can_manage_shifts' => $user->canManageShifts(),
-            'is_super_admin' => $user->isSuperAdmin(),
-            'is_agency_admin' => $user->isAgencyAdmin(),
-            'is_employer_admin' => $user->isEmployerAdmin(),
-            'is_employee' => $user->isEmployee(),
-            'is_contact' => $user->isContact(),
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->role,
+            'display_role' => $this->userRoleService->getDisplayRole($user),
+            'contextual_id' => $this->userRoleService->getContextualId($user),
+            'permissions' => $this->getUserPermissions($user),
+            'profile_complete' => $user->has_complete_profile,
+            'address_complete' => $user->has_complete_address,
+            'email_verified' => $user->hasVerifiedEmail(),
+            'status' => $user->status,
+            'phone' => $user->phone,
+            'meta' => $user->meta,
         ];
+    }
+
+    private function getUserPermissions(User $user): array
+    {
+        $permissions = [
+            'can_approve_timesheets' => $this->permissionService->check($user, 'approve.timesheets'),
+            'can_manage_shifts' => $this->permissionService->check($user, 'manage.shifts'),
+            'can_view_reports' => $this->permissionService->check($user, 'view.reports'),
+            'can_manage_contracts' => $this->permissionService->check($user, 'manage.contracts'),
+        ];
+
+        $roleFlags = [
+            'is_super_admin' => $user->isSuperAdmin(),
+            'is_agency_admin' => $user->role === 'agency_admin',
+            'is_employer_admin' => $user->role === 'employer_admin',
+            'is_employee' => $user->role === 'employee',
+            'is_contact' => $user->role === 'contact',
+            'is_agent' => $user->role === 'agent',
+        ];
+
+        return array_merge($permissions, $roleFlags);
     }
 }

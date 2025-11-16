@@ -3,89 +3,96 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\UserRoleService;
+use App\Services\UserProfileService;
+use App\Services\PermissionService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 
 class UserController extends Controller
 {
-    /**
-     * Get the authenticated user with role data
-     */
-    public function show(Request $request)
+    public function __construct(
+        private UserRoleService $roleService,
+        private UserProfileService $profileService,
+        private PermissionService $permissionService
+    ) {}
+
+    public function show(Request $request): JsonResponse
     {
         $user = $request->user();
-
-        // Load relationships based on role
         $this->loadRoleSpecificRelations($user);
 
         return response()->json([
             'user' => $user,
             'permissions' => $this->getUserPermissions($user),
-            'profile_complete' => $user->has_complete_profile,
+            'profile_complete' => $this->profileService->hasCompleteProfile($user),
+            'contextual_id' => $this->roleService->getContextualId($user),
+            'display_role' => $this->roleService->getDisplayRole($user),
         ]);
     }
 
-    public function update(Request $request)
+    public function update(Request $request): JsonResponse
     {
         $user = $request->user();
 
         $validated = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
-            'phone' => ['sometimes', 'string', 'max:20'],
-            'date_of_birth' => ['sometimes', 'date'],
-            'emergency_contact_name' => ['sometimes', 'string', 'max:255'],
-            'emergency_contact_phone' => ['sometimes', 'string', 'max:20'],
-            'address' => ['sometimes', 'string'],
+            'phone' => ['sometimes', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'],
+            'meta' => ['sometimes', 'array'],
         ]);
 
         $user->update($validated);
-
         $this->loadRoleSpecificRelations($user);
 
         return response()->json([
             'user' => $user,
-            'profile_complete' => $user->has_complete_profile,
+            'profile_complete' => $this->profileService->hasCompleteProfile($user),
             'message' => 'Profile updated successfully'
         ]);
     }
 
-    protected function loadRoleSpecificRelations(User $user)
+    private function loadRoleSpecificRelations(User $user): void
     {
-        $relations = [];
-
-        switch ($user->role) {
-            case 'agency_admin':
-                $relations[] = 'agency';
-                break;
-            case 'employer_admin':
-                $relations[] = 'employer';
-                break;
-            case 'employee':
-                $relations[] = 'employee';
-                break;
-            case 'contact':
-                $relations[] = 'contact';
-                break;
-        }
+        $relations = match ($user->role) {
+            'agency_admin' => ['agency'],
+            'agent' => ['agent.agency'],
+            'employer_admin' => ['employerUser.employer'],
+            'contact' => ['contact.employer'],
+            'employee' => ['employee.agencyEmployees.agency'],
+            default => []
+        };
 
         if (!empty($relations)) {
             $user->load($relations);
         }
     }
 
-
-    protected function getUserPermissions(User $user)
+    private function getUserPermissions(User $user): array
     {
-        return [
-            'can_approve_timesheets' => $user->canApproveTimesheets(),
-            'can_manage_shifts' => $user->canManageShifts(),
+        $permissions = [
+            'approve.timesheets',
+            'manage.shifts',
+            'manage.agency_employees',
+            'manage.locations',
+            'create.shift_requests',
+            'view.financials',
+            'manage.contracts',
+            'view.reports',
+            'approve.assignments',
+        ];
+
+        $userPermissions = [];
+        foreach ($permissions as $permission) {
+            $userPermissions[$permission] = $this->roleService->can($user, $permission);
+        }
+
+        return array_merge($userPermissions, [
             'is_super_admin' => $user->isSuperAdmin(),
             'is_agency_admin' => $user->isAgencyAdmin(),
+            'is_agent' => $user->isAgent(),
             'is_employer_admin' => $user->isEmployerAdmin(),
             'is_employee' => $user->isEmployee(),
             'is_contact' => $user->isContact(),
-        ];
+        ]);
     }
-
-
 }

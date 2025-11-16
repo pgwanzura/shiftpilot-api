@@ -32,15 +32,4 @@ class Agent extends Model
         return $this->agency_id;
     }
 
-    public function canApproveAssignments(): bool
-    {
-        return false;
-    }
-
-    public function canApproveTimesheets(): bool
-    {
-        // Assuming agents can approve timesheets as per schema roles
-        // This might need more granular permission checks based on your policy logic
-        return true;
-    }
 }

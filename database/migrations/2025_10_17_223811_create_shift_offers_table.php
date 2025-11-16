@@ -10,17 +10,20 @@ return new class() extends Migration {
         Schema::create('shift_offers', function (Blueprint $table) {
             $table->id();
             $table->foreignId('shift_id')->constrained()->onDelete('cascade');
-            $table->foreignId('employee_id')->constrained()->onDelete('cascade');
-            $table->foreignId('offered_by_id')->constrained('users')->onDelete('cascade');
+            $table->foreignId('agency_employee_id')->constrained()->onDelete('cascade');
+            $table->foreignId('agency_id')->constrained()->onDelete('cascade');
+            $table->foreignId('agent_id')->constrained()->onDelete('cascade');
             $table->string('status')->default('pending');
             $table->timestamp('expires_at');
             $table->timestamp('responded_at')->nullable();
             $table->text('response_notes')->nullable();
             $table->timestamps();
 
-            $table->unique(['shift_id', 'employee_id']);
-            $table->index(['employee_id', 'status']);
-            $table->index(['status', 'expires_at']);
+            $table->unique(['shift_id', 'agency_employee_id']);
+            $table->index(['agency_id', 'status']);
+            $table->index(['agent_id']);
+            $table->index(['expires_at']);
+            $table->index(['agency_employee_id', 'status']);
         });
     }
 

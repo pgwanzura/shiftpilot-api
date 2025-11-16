@@ -163,6 +163,7 @@ class ValidateSystemSchema extends Command
         return false;
     }
 
+    // ADDED: Method to detect schema builder methods like timestamps(), softDeletes(), etc.
     protected function hasSchemaBuilderMethod(string $content, string $column): bool
     {
         // Map columns to their schema builder methods
@@ -174,11 +175,18 @@ class ValidateSystemSchema extends Command
             'remember_token' => ['rememberToken'],
         ];
 
-        if (isset($schemaMethods[$column])) {
-            foreach ($schemaMethods[$column] as $method) {
-                if (preg_match("/\\\$table->{$method}\(\s*\)/", $content)) {
-                    return true;
-                }
+        if (!isset($schemaMethods[$column])) {
+            return false;
+        }
+
+        foreach ($schemaMethods[$column] as $method) {
+            // Simple string matching is more reliable than regex for this case
+            if (str_contains($content, "\$table->{$method}()")) {
+                return true;
+            }
+            // Also check with spaces
+            if (str_contains($content, "\$table->{$method} (")) {
+                return true;
             }
         }
 
@@ -361,6 +369,7 @@ class ValidateSystemSchema extends Command
         }
     }
 
+    // ADDED: Comprehensive method to check if column is defined in migration
     protected function isColumnDefinedInMigration(string $content, string $column): bool
     {
         // Check for explicit column definitions
@@ -371,6 +380,18 @@ class ValidateSystemSchema extends Command
         // Check for schema builder methods
         if ($this->hasSchemaBuilderMethod($content, $column)) {
             return true;
+        }
+
+        // Additional check: look for the column in any table method call
+        $patterns = [
+            "/->[a-zA-Z]+\(\s*['\"]{$column}['\"]/", // Any method with this column name
+            "/\\\$table->[a-zA-Z]+.*{$column}/",     // Any table method mentioning this column
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $content)) {
+                return true;
+            }
         }
 
         return false;
@@ -407,10 +428,17 @@ class ValidateSystemSchema extends Command
             }
 
             // Also show schema builder methods used
-            if (preg_match_all('/\\\$table->([a-zA-Z]+)\(/', $content, $matches)) {
+            if (preg_match_all('/\\\$table->([a-zA-Z]+)\(\s*\)/', $content, $matches)) {
                 $methods = array_unique($matches[1]);
                 if (!empty($methods)) {
                     $this->line("  Schema methods: " . implode(', ', $methods));
+
+                    // Debug specific columns
+                    $testColumns = ['created_at', 'updated_at', 'id'];
+                    foreach ($testColumns as $column) {
+                        $hasMethod = $this->hasSchemaBuilderMethod($content, $column);
+                        $this->line("  Column '{$column}' found via schema method: " . ($hasMethod ? 'YES' : 'NO'));
+                    }
                 }
             }
         }

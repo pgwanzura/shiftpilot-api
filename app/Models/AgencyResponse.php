@@ -25,17 +25,16 @@ class AgencyResponse extends Model
         'submitted_by_id',
         'responded_at',
         'employer_decision_by_id',
-        'employer_decision_at'
+        'employer_decision_at',
     ];
 
     protected $casts = [
-        'responded_at' => 'datetime',
-        'employer_decision_at' => 'datetime',
         'proposed_rate' => 'decimal:2',
         'proposed_start_date' => 'date',
         'proposed_end_date' => 'date',
         'estimated_total_hours' => 'integer',
-        'terms' => 'string'
+        'responded_at' => 'datetime',
+        'employer_decision_at' => 'datetime',
     ];
 
     public function shiftRequest(): BelongsTo
@@ -83,12 +82,22 @@ class AgencyResponse extends Model
         return $query->where('status', 'rejected');
     }
 
-    public function scopeForAgency($query, $agencyId)
+    public function scopeCounterOffered($query)
+    {
+        return $query->where('status', 'counter_offered');
+    }
+
+    public function scopeWithdrawn($query)
+    {
+        return $query->where('status', 'withdrawn');
+    }
+
+    public function scopeForAgency($query, int $agencyId)
     {
         return $query->where('agency_id', $agencyId);
     }
 
-    public function scopeForShiftRequest($query, $shiftRequestId)
+    public function scopeForShiftRequest($query, int $shiftRequestId)
     {
         return $query->where('shift_request_id', $shiftRequestId);
     }
@@ -140,6 +149,10 @@ class AgencyResponse extends Model
 
     public function exceedsMaxHourlyRate(): bool
     {
+        if (!$this->shiftRequest) {
+            return false;
+        }
+
         return $this->proposed_rate > $this->shiftRequest->max_hourly_rate;
     }
 
@@ -150,6 +163,10 @@ class AgencyResponse extends Model
         }
 
         if ($this->hasAssignment()) {
+            return false;
+        }
+
+        if (!$this->agency || !$this->shiftRequest) {
             return false;
         }
 
@@ -164,7 +181,7 @@ class AgencyResponse extends Model
         return !$this->exceedsMaxHourlyRate();
     }
 
-    public function accept($decisionBy): bool
+    public function accept(User $decisionBy): bool
     {
         if (!$this->canBeAccepted()) {
             return false;
@@ -173,11 +190,11 @@ class AgencyResponse extends Model
         return $this->update([
             'status' => 'accepted',
             'employer_decision_by_id' => $decisionBy->id,
-            'employer_decision_at' => now()
+            'employer_decision_at' => now(),
         ]);
     }
 
-    public function reject($decisionBy): bool
+    public function reject(User $decisionBy): bool
     {
         if (!$this->canBeRejected()) {
             return false;
@@ -186,7 +203,7 @@ class AgencyResponse extends Model
         return $this->update([
             'status' => 'rejected',
             'employer_decision_by_id' => $decisionBy->id,
-            'employer_decision_at' => now()
+            'employer_decision_at' => now(),
         ]);
     }
 
@@ -198,7 +215,7 @@ class AgencyResponse extends Model
 
         return $this->update([
             'status' => 'withdrawn',
-            'responded_at' => now()
+            'responded_at' => now(),
         ]);
     }
 
@@ -210,20 +227,20 @@ class AgencyResponse extends Model
 
         return $this->update(array_merge($attributes, [
             'status' => 'counter_offered',
-            'responded_at' => now()
+            'responded_at' => now(),
         ]));
     }
 
-    protected static function boot()
+    protected static function boot(): void
     {
         parent::boot();
 
-        static::creating(function ($agencyResponse) {
+        static::creating(function ($agencyResponse): void {
             $agencyResponse->validateProposedRate();
             $agencyResponse->validateAgencyContract();
         });
 
-        static::updating(function ($agencyResponse) {
+        static::updating(function ($agencyResponse): void {
             if ($agencyResponse->isDirty('status') && $agencyResponse->isAccepted()) {
                 $agencyResponse->validateNoExistingAssignment();
             }
@@ -232,7 +249,7 @@ class AgencyResponse extends Model
 
     private function validateProposedRate(): void
     {
-        if ($this->proposed_rate > $this->shiftRequest->max_hourly_rate) {
+        if ($this->exceedsMaxHourlyRate()) {
             throw new \InvalidArgumentException('Proposed rate cannot exceed shift request maximum hourly rate');
         }
     }
@@ -246,7 +263,7 @@ class AgencyResponse extends Model
 
     private function validateNoExistingAssignment(): void
     {
-        if ($this->assignment()->exists()) {
+        if ($this->hasAssignment()) {
             throw new \InvalidArgumentException('Assignment already exists for this agency response');
         }
     }

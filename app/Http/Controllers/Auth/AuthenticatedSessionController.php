@@ -4,38 +4,49 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
-use Illuminate\Http\Request;
+use App\Models\User;
+use App\Services\PermissionService;
+use App\Services\UserRoleService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class AuthenticatedSessionController extends Controller
 {
+    public function __construct(
+        private PermissionService $permissionService,
+        private UserRoleService $userRoleService
+    ) {}
+
     public function store(LoginRequest $request): JsonResponse
     {
         $request->authenticate();
-        $request->session()->regenerate();
 
         $user = Auth::user();
-        $user->update(['last_login_at' => now()]);
+        $user->recordLogin();
 
+        $request->session()->regenerate();
         $token = $user->createToken('auth-token')->plainTextToken;
 
         $this->loadRoleSpecificRelations($user);
 
         return response()->json([
-            'user' => $user,
+            'user' => $this->formatUserResponse($user),
             'access_token' => $token,
             'token_type' => 'Bearer',
-            'permissions' => $this->getUserPermissions($user),
-            'profile_complete' => $user->has_complete_profile,
             'message' => 'Login successful'
         ]);
     }
 
     public function destroy(Request $request): JsonResponse
     {
-        Auth::guard('web')->logout();
+        $user = $request->user();
 
+        if ($user) {
+            $user->currentAccessToken()?->delete();
+        }
+
+        Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
@@ -44,40 +55,57 @@ class AuthenticatedSessionController extends Controller
         ]);
     }
 
-    protected function loadRoleSpecificRelations($user)
+    private function loadRoleSpecificRelations(User $user): void
     {
-        $relations = [];
+        $relation = match ($user->role) {
+            'agency_admin' => 'agency',
+            'employer_admin' => 'employerUser.employer',
+            'employee' => 'employee',
+            'contact' => 'contact.employer',
+            'agent' => 'agent.agency',
+            default => null
+        };
 
-        switch ($user->role) {
-            case 'agency_admin':
-                $relations[] = 'agency';
-                break;
-            case 'employer_admin':
-                $relations[] = 'employer';
-                break;
-            case 'employee':
-                $relations[] = 'employee';
-                break;
-            case 'contact':
-                $relations[] = 'contact';
-                break;
-        }
-
-        if (!empty($relations)) {
-            $user->load($relations);
+        if ($relation) {
+            $user->load($relation);
         }
     }
 
-    protected function getUserPermissions($user)
+    private function formatUserResponse(User $user): array
     {
         return [
-            'can_approve_timesheets' => $user->canApproveTimesheets(),
-            'can_manage_shifts' => $user->canManageShifts(),
-            'is_super_admin' => $user->isSuperAdmin(),
-            'is_agency_admin' => $user->isAgencyAdmin(),
-            'is_employer_admin' => $user->isEmployerAdmin(),
-            'is_employee' => $user->isEmployee(),
-            'is_contact' => $user->isContact(),
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->role,
+            'display_role' => $this->userRoleService->getDisplayRole($user),
+            'contextual_id' => $this->userRoleService->getContextualId($user),
+            'permissions' => $this->getUserPermissions($user),
+            'profile_complete' => $user->has_complete_profile,
+            'email_verified' => $user->hasVerifiedEmail(),
+            'status' => $user->status,
+            'meta' => $user->meta,
         ];
+    }
+
+    private function getUserPermissions(User $user): array
+    {
+        $permissions = [
+            'can_approve_timesheets' => $this->permissionService->check($user, 'approve.timesheets'),
+            'can_manage_shifts' => $this->permissionService->check($user, 'manage.shifts'),
+            'can_view_reports' => $this->permissionService->check($user, 'view.reports'),
+            'can_manage_contracts' => $this->permissionService->check($user, 'manage.contracts'),
+        ];
+
+        $roleFlags = [
+            'is_super_admin' => $user->isSuperAdmin(),
+            'is_agency_admin' => $user->role === 'agency_admin',
+            'is_employer_admin' => $user->role === 'employer_admin',
+            'is_employee' => $user->role === 'employee',
+            'is_contact' => $user->role === 'contact',
+            'is_agent' => $user->role === 'agent',
+        ];
+
+        return array_merge($permissions, $roleFlags);
     }
 }

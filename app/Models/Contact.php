@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Contact extends Model
 {
@@ -14,62 +13,83 @@ class Contact extends Model
 
     protected $fillable = [
         'employer_id',
+        'user_id',
         'name',
         'email',
         'phone',
         'role',
+        'is_primary',
         'can_sign_timesheets',
+        'can_approve_assignments',
+        'can_manage_locations',
         'meta',
     ];
 
     protected $casts = [
         'can_sign_timesheets' => 'boolean',
+        'can_approve_assignments' => 'boolean',
+        'can_manage_locations' => 'boolean',
+        'is_primary' => 'boolean',
         'meta' => 'array',
     ];
 
-
-    /**
-     * The employer that the contact belongs to.
-     */
     public function employer(): BelongsTo
     {
         return $this->belongsTo(Employer::class);
     }
 
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function shiftApprovals(): HasMany
     {
-        return $this->hasMany(ShiftApproval::class, 'contact_id');
+        return $this->hasMany(ShiftApproval::class);
     }
 
     public function timesheets(): HasMany
     {
-        // Assuming timesheets are approved by employer contact, foreign key will be 'employer_approved_by_id'
         return $this->hasMany(Timesheet::class, 'employer_approved_by_id');
     }
 
-    /**
-     * Get employer ID for contact.
-     */
-    public function getEmployerId(): ?int
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(Assignment::class, 'approved_by_id');
+    }
+
+    public function getEmployerId(): int
     {
         return $this->employer_id;
     }
 
-    /**
-     * Check if contact can approve assignments.
-     */
-    public function canApproveAssignments(): bool
+    public function isActive(): bool
     {
-        // Assuming contacts can approve assignments as per schema roles and permissions
-        return $this->can_sign_timesheets; // Example, adjust based on actual schema rules
+        return $this->employer->isActive();
     }
 
-    /**
-     * Check if contact can approve timesheets.
-     */
-    public function canApproveTimesheets(): bool
+    public function scopePrimary($query)
     {
-        // Assuming contacts can approve timesheets as per schema roles and permissions
-        return $this->can_sign_timesheets; // Example, adjust based on actual schema rules
+        return $query->where('is_primary', true);
+    }
+
+    public function scopeCanApproveTimesheets($query)
+    {
+        return $query->where('can_sign_timesheets', true);
+    }
+
+    public function scopeCanApproveAssignments($query)
+    {
+        return $query->where('can_approve_assignments', true);
+    }
+
+    public function scopeCanManageLocations($query)
+    {
+        return $query->where('can_manage_locations', true);
+    }
+
+    public function scopeForEmployer($query, int $employerId)
+    {
+        return $query->where('employer_id', $employerId);
     }
 }

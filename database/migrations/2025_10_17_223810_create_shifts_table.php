@@ -11,6 +11,7 @@ return new class extends Migration
         Schema::create('shifts', function (Blueprint $table) {
             $table->id();
             $table->foreignId('assignment_id')->constrained('assignments');
+            $table->foreignId('location_id')->constrained('locations');
             $table->date('shift_date');
             $table->timestamp('start_time');
             $table->timestamp('end_time');
@@ -22,6 +23,8 @@ return new class extends Migration
 
             $table->index(['assignment_id', 'shift_date']);
             $table->index(['shift_date', 'status']);
+            $table->index(['location_id']);
+            $table->index(['start_time', 'end_time']);
         });
     }
 

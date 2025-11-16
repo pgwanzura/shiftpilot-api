@@ -42,9 +42,9 @@ class Agency extends Model
         'updated_at' => 'datetime',
     ];
 
-    public function user(): BelongsTo
+    public function branches(): HasMany
     {
-        return $this->belongsTo(User::class);
+        return $this->hssMany(AgencyBranch::class);
     }
 
     public function agents(): HasMany

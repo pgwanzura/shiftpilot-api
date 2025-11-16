@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
-use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Employer extends Model
 {
@@ -33,7 +32,7 @@ class Employer extends Model
 
     protected $casts = [
         'meta' => 'array',
-        'status' => 'string',
+        'company_size' => 'integer',
     ];
 
     public function contacts(): HasMany
@@ -66,27 +65,56 @@ class Employer extends Model
         return $this->morphMany(Subscription::class, 'subscriber');
     }
 
-    /**
-     * Get employer ID for employer.
-     */
-    public function getEmployerId(): ?int
+    public function shiftRequests(): HasMany
+    {
+        return $this->hasMany(ShiftRequest::class);
+    }
+
+    public function timesheets(): HasMany
+    {
+        return $this->hasMany(Timesheet::class);
+    }
+
+    public function getEmployerId(): int
     {
         return $this->id;
     }
 
-    /**
-     * Employer can approve assignments.
-     */
     public function canApproveAssignments(): bool
     {
-        return true;
+        return $this->status === 'active';
     }
 
-    /**
-     * Employer can approve timesheets.
-     */
-    public function canApproveTimesheets(): bool
+    public function isActive(): bool
     {
-        return true;
+        return $this->status === 'active';
+    }
+
+    public function hasActiveSubscription(): bool
+    {
+        return $this->subscriptions()
+            ->where('status', 'active')
+            ->where('ends_at', '>', now())
+            ->exists();
+    }
+
+    public function getPrimaryContact(): ?Contact
+    {
+        return $this->contacts()
+            ->where('is_primary', true)
+            ->first();
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where('status', 'active');
+    }
+
+    public function scopeWithActiveSubscriptions($query)
+    {
+        return $query->whereHas('subscriptions', function ($q) {
+            $q->where('status', 'active')
+                ->where('ends_at', '>', now());
+        });
     }
 }

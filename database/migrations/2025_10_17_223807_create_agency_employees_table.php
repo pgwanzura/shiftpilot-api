@@ -11,6 +11,7 @@ return new class extends Migration
         Schema::create('agency_employees', function (Blueprint $table) {
             $table->id();
             $table->foreignId('agency_id')->constrained()->onDelete('cascade');
+            $table->foreignId('agency_branch_id')->constrained()->onDelete('cascade');
             $table->foreignId('employee_id')->constrained()->onDelete('cascade');
             $table->string('position')->nullable();
             $table->decimal('pay_rate', 8, 2);

@@ -11,6 +11,7 @@ return new class() extends Migration {
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->foreignId('agency_id')->constrained()->onDelete('cascade');
+            $table->foreignId('agency_branch_id')->constrained()->onDelete('cascade');
             $table->json('permissions')->nullable();
             $table->timestamps();
 

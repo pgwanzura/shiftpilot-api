@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Builder;
 
 class Employee extends Model
 {
@@ -194,6 +195,19 @@ class Employee extends Model
                         });
                 });
         });
+    }
+
+    public function scopeVisibleToAgency(Builder $query, int $agencyId): Builder
+    {
+        return $query->whereHas('agencyEmployees', function (Builder $q) use ($agencyId) {
+            $q->where('agency_id', $agencyId);
+        });
+    }
+
+    public function scopeVisibleToAgent(Builder $query, int $agentId): Builder
+    {
+        $agent = Agent::find($agentId);
+        return $this->scopeVisibleToAgency($query, $agent->agency_id);
     }
 
     public function getAgeAttribute(): ?int
