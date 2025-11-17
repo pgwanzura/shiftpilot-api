@@ -16,10 +16,13 @@ return new class extends Migration
             $table->unsignedBigInteger('context_id')->nullable();
             $table->foreignId('last_message_id')->nullable()->constrained('messages')->nullOnDelete();
             $table->timestamp('last_message_at')->nullable();
+            $table->timestamp('archived_at')->nullable();
             $table->timestamps();
 
             $table->index(['context_type', 'context_id']);
             $table->index(['conversation_type', 'last_message_at']);
+            $table->index(['last_message_at', 'conversation_type']);
+            $table->index(['archived_at', 'last_message_at']);
         });
 
         Schema::create('conversation_participants', function (Blueprint $table) {
@@ -34,6 +37,8 @@ return new class extends Migration
 
             $table->unique(['conversation_id', 'user_id']);
             $table->index(['user_id', 'left_at']);
+            $table->index(['conversation_id', 'left_at']);
+            $table->index(['user_id', 'muted_until']);
         });
 
         Schema::create('messages', function (Blueprint $table) {
@@ -45,10 +50,14 @@ return new class extends Migration
             $table->json('attachments')->nullable();
             $table->boolean('is_read')->default(false);
             $table->timestamp('read_at')->nullable();
+            $table->timestamp('deleted_at')->nullable();
             $table->timestamps();
 
             $table->index(['conversation_id', 'created_at']);
+            $table->index(['conversation_id', 'created_at', 'id']);
             $table->index(['sender_id', 'created_at']);
+            $table->index(['conversation_id', 'message_type']);
+            $table->index(['deleted_at', 'created_at']);
         });
 
         Schema::create('message_recipients', function (Blueprint $table) {
@@ -61,6 +70,8 @@ return new class extends Migration
 
             $table->unique(['message_id', 'user_id']);
             $table->index(['user_id', 'is_read']);
+            $table->index(['user_id', 'is_read', 'created_at']);
+            $table->index(['message_id', 'is_read']);
         });
     }
 

@@ -18,10 +18,11 @@ class SendMessageRequest extends FormRequest
             'conversation_id' => 'required|exists:conversations,id',
             'content' => 'required|string|max:5000',
             'message_type' => 'required|in:text,image,file,system',
-            'attachments' => 'sometimes|array',
-            'attachments.*.name' => 'required|string',
-            'attachments.*.url' => 'required|url',
-            'attachments.*.size' => 'sometimes|integer',
+            'attachments' => 'sometimes|array|max:10',
+            'attachments.*.name' => 'required|string|max:255',
+            'attachments.*.url' => 'required|url|max:1000',
+            'attachments.*.size' => 'required|integer|min:1|max:10485760', // 10MB max
+            'attachments.*.mime_type' => 'required|string|max:100',
         ];
     }
 }

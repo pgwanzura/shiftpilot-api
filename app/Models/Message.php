@@ -84,4 +84,14 @@ class Message extends Model
     {
         return count($this->attachments ?? []);
     }
+
+    public function softDelete(): bool
+    {
+        return $this->update(['deleted_at' => now()]);
+    }
+
+    public function scopeNotDeleted($query)
+    {
+        return $query->whereNull('deleted_at');
+    }
 }

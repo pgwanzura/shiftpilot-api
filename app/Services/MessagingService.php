@@ -47,47 +47,79 @@ class MessagingService
 
     public function sendMessage(array $data, int $senderId): Message
     {
-        return DB::transaction(function () use ($data, $senderId) {
-            $message = Message::create([
-                'conversation_id' => $data['conversation_id'],
-                'sender_id' => $senderId,
-                'content' => $data['content'],
-                'message_type' => $data['message_type'],
-                'attachments' => $data['attachments'] ?? null,
-            ]);
+        $startTime = microtime(true);
 
-            $participants = ConversationParticipant::where('conversation_id', $data['conversation_id'])
-                ->active()
-                ->get();
-
-            foreach ($participants as $participant) {
-                MessageRecipient::create([
-                    'message_id' => $message->id,
-                    'user_id' => $participant->user_id,
-                    'is_read' => $participant->user_id === $senderId,
-                    'read_at' => $participant->user_id === $senderId ? now() : null,
+        try {
+            $message = DB::transaction(function () use ($data, $senderId) {
+                $message = Message::create([
+                    'conversation_id' => $data['conversation_id'],
+                    'sender_id' => $senderId,
+                    'content' => $data['content'],
+                    'message_type' => $data['message_type'],
+                    'attachments' => $data['attachments'] ?? null,
                 ]);
-            }
 
-            Conversation::where('id', $data['conversation_id'])->update([
-                'last_message_id' => $message->id,
-                'last_message_at' => now(),
+                $participants = ConversationParticipant::where('conversation_id', $data['conversation_id'])
+                    ->active()
+                    ->get();
+
+                foreach ($participants as $participant) {
+                    MessageRecipient::create([
+                        'message_id' => $message->id,
+                        'user_id' => $participant->user_id,
+                        'is_read' => $participant->user_id === $senderId,
+                        'read_at' => $participant->user_id === $senderId ? now() : null,
+                    ]);
+                }
+
+                $conversation = Conversation::where('id', $data['conversation_id'])->first();
+                $conversation->update([
+                    'last_message_id' => $message->id,
+                    'last_message_at' => now(),
+                ]);
+
+                $message->load(['sender', 'recipients.user', 'conversation']);
+
+                MessageSent::dispatch($message);
+                ConversationUpdated::dispatch($conversation);
+
+                return $message;
+            });
+
+            logger()->info('Message sent successfully', [
+                'duration_ms' => (microtime(true) - $startTime) * 1000,
+                'message_id' => $message->id,
+                'conversation_id' => $message->conversation_id,
+                'participants_count' => $message->recipients->count(),
+                'message_type' => $message->message_type,
             ]);
-
-            $message->load(['sender', 'recipients.user']);
-
-            MessageSent::dispatch($message);
-            ConversationUpdated::dispatch($message->conversation);
 
             return $message;
-        });
+        } catch (\Exception $e) {
+            logger()->error('Failed to send message', [
+                'conversation_id' => $data['conversation_id'] ?? null,
+                'sender_id' => $senderId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'duration_ms' => (microtime(true) - $startTime) * 1000,
+            ]);
+            throw new \RuntimeException('Failed to send message');
+        }
     }
 
     public function getUserConversations(int $userId, array $filters = []): LengthAwarePaginator
     {
         $query = Conversation::whereHas('participants', function ($q) use ($userId) {
             $q->where('user_id', $userId)->active();
-        })->with(['lastMessage.sender', 'participants.user']);
+        })
+            ->with([
+                'lastMessage.sender',
+                'participants.user:id,name,email,avatar',
+                'participants' => function ($q) use ($userId) {
+                    $q->where('user_id', '!=', $userId)->active();
+                }
+            ])
+            ->select(['id', 'title', 'conversation_type', 'last_message_id', 'last_message_at', 'created_at']);
 
         if (isset($filters['conversation_type'])) {
             $query->where('conversation_type', $filters['conversation_type']);

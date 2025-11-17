@@ -84,4 +84,14 @@ class Conversation extends Model
     {
         return $this->participants()->whereNull('left_at')->count();
     }
+
+    public function archive(): bool
+    {
+        return $this->update(['archived_at' => now()]);
+    }
+
+    public function scopeNotArchived($query)
+    {
+        return $query->whereNull('archived_at');
+    }
 }

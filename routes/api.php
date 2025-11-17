@@ -41,11 +41,12 @@ use App\Http\Controllers\{
     AssignmentController,
     CalendarEventsController,
     AgencySubscriptionController,
-    PricePlanController
+    PricePlanController,
+    ConversationController,
+    ConversationParticipantController
 };
 use Illuminate\Support\Facades\Route;
 
-// Public Routes
 Route::prefix('auth')->middleware('api')->group(function (): void {
     Route::post('/register', [RegisteredUserController::class, 'store']);
     Route::post('/login', [AuthenticatedSessionController::class, 'store'])->name('login');
@@ -54,16 +55,13 @@ Route::prefix('auth')->middleware('api')->group(function (): void {
     Route::get('email/verify/{id}/{hash}', [VerifyEmailController::class, '__invoke'])->name('verification.verify');
 });
 
-// Public Price Plans (No authentication required)
 Route::get('/price-plans', [PricePlanController::class, 'index']);
 
-Route::middleware('auth:sanctum')->group(function (): void {
-    // Authentication & User Management
+Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function (): void {
     Route::get('/user', [UserController::class, 'show']);
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::post('email/verification-notification', [EmailVerificationNotificationController::class, 'store'])->name('verification.send');
 
-    // Subscription & Billing Domain
     Route::prefix('subscriptions')->group(function (): void {
         Route::get('/', [SubscriptionController::class, 'index'])->middleware('can:viewAny,App\Models\Subscription');
         Route::get('{subscription}', [SubscriptionController::class, 'show'])->middleware('can:view,subscription');
@@ -86,7 +84,31 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::patch('{pricePlan}/deactivate', [PricePlanController::class, 'deactivate'])->middleware('can:update,pricePlan');
     });
 
-    // Agency Management Domain
+    Route::prefix('conversations')->middleware('throttle:30,1')->group(function (): void {
+        Route::get('/', [ConversationController::class, 'index']);
+        Route::post('/', [ConversationController::class, 'store']);
+        Route::get('unread-count', [ConversationController::class, 'getUnreadCount']);
+
+        Route::prefix('{conversationId}')->group(function (): void {
+            Route::get('/', [ConversationController::class, 'show']);
+            Route::get('/messages', [ConversationController::class, 'getMessages']);
+            Route::post('/messages', [ConversationController::class, 'sendMessage'])->middleware('throttle:10,1');
+            Route::post('/mark-read', [ConversationController::class, 'markAsRead']);
+            Route::post('/participants', [ConversationController::class, 'addParticipant']);
+            Route::delete('/participants/{userId}', [ConversationController::class, 'removeParticipant']);
+            Route::post('/leave', [ConversationController::class, 'leaveConversation']);
+        });
+    });
+
+    Route::prefix('conversation-participants')->group(function (): void {
+        Route::prefix('{participant}')->group(function (): void {
+            Route::put('/', [ConversationParticipantController::class, 'update']);
+            Route::post('/mute', [ConversationParticipantController::class, 'mute']);
+            Route::post('/unmute', [ConversationParticipantController::class, 'unmute']);
+            Route::delete('/', [ConversationParticipantController::class, 'destroy']);
+        });
+    });
+
     Route::prefix('agencies/{agency}')->group(function (): void {
         Route::get('dashboard', [AgencyController::class, 'dashboard']);
         Route::get('employees', [AgencyController::class, 'employees']);
@@ -124,7 +146,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('{branch}/nearby', [AgencyBranchController::class, 'nearby']);
     });
 
-    // Staffing Operations Domain
     Route::prefix('assignments')->group(function (): void {
         Route::get('/', [AssignmentController::class, 'index']);
         Route::post('/', [AssignmentController::class, 'store']);
@@ -170,7 +191,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::put('/availability', [CalendarEventsController::class, 'updateAvailability']);
     });
 
-    // Protected routes with subscription limits
     Route::middleware('subscription.limit:employees')->group(function (): void {
         Route::post('/employees', [EmployeeController::class, 'store']);
         Route::put('/employees/{employee}', [EmployeeController::class, 'update']);
@@ -186,7 +206,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::delete('/shift-requests/{shiftRequest}', [ShiftRequestController::class, 'destroy']);
     });
 
-    // Standard API Resources (Read-only operations outside limits)
     Route::apiResource('agencies', AgencyController::class);
     Route::apiResource('agents', AgentController::class);
     Route::apiResource('employers', EmployerController::class);
@@ -215,7 +234,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::apiResource('profiles', ProfileController::class);
 });
 
-// System Health Check
 Route::get('/healthcheck', function (): array {
     return [
         'status' => 'ok',
