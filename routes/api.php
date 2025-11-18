@@ -47,6 +47,8 @@ use App\Http\Controllers\{
 };
 use Illuminate\Support\Facades\Route;
 
+
+
 Route::prefix('auth')->middleware('api')->group(function (): void {
     Route::post('/register', [RegisteredUserController::class, 'store']);
     Route::post('/login', [AuthenticatedSessionController::class, 'store'])->name('login');

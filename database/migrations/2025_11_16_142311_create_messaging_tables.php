@@ -8,13 +8,14 @@ return new class extends Migration
 {
     public function up(): void
     {
+
         Schema::create('conversations', function (Blueprint $table) {
             $table->id();
             $table->string('title')->nullable();
             $table->enum('conversation_type', ['direct', 'group', 'shift', 'assignment'])->default('direct');
             $table->string('context_type')->nullable();
             $table->unsignedBigInteger('context_id')->nullable();
-            $table->foreignId('last_message_id')->nullable()->constrained('messages')->nullOnDelete();
+            $table->unsignedBigInteger('last_message_id')->nullable();
             $table->timestamp('last_message_at')->nullable();
             $table->timestamp('archived_at')->nullable();
             $table->timestamps();
@@ -25,21 +26,6 @@ return new class extends Migration
             $table->index(['archived_at', 'last_message_at']);
         });
 
-        Schema::create('conversation_participants', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('conversation_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->enum('role', ['participant', 'admin'])->default('participant');
-            $table->timestamp('joined_at');
-            $table->timestamp('left_at')->nullable();
-            $table->timestamp('muted_until')->nullable();
-            $table->timestamps();
-
-            $table->unique(['conversation_id', 'user_id']);
-            $table->index(['user_id', 'left_at']);
-            $table->index(['conversation_id', 'left_at']);
-            $table->index(['user_id', 'muted_until']);
-        });
 
         Schema::create('messages', function (Blueprint $table) {
             $table->id();
@@ -60,6 +46,26 @@ return new class extends Migration
             $table->index(['deleted_at', 'created_at']);
         });
 
+        Schema::table('conversations', function (Blueprint $table) {
+            $table->foreign('last_message_id')->references('id')->on('messages')->nullOnDelete();
+        });
+
+        Schema::create('conversation_participants', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('conversation_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->enum('role', ['participant', 'admin'])->default('participant');
+            $table->timestamp('joined_at');
+            $table->timestamp('left_at')->nullable();
+            $table->timestamp('muted_until')->nullable();
+            $table->timestamps();
+
+            $table->unique(['conversation_id', 'user_id']);
+            $table->index(['user_id', 'left_at']);
+            $table->index(['conversation_id', 'left_at']);
+            $table->index(['user_id', 'muted_until']);
+        });
+
         Schema::create('message_recipients', function (Blueprint $table) {
             $table->id();
             $table->foreignId('message_id')->constrained()->cascadeOnDelete();
@@ -77,9 +83,16 @@ return new class extends Migration
 
     public function down(): void
     {
+
         Schema::dropIfExists('message_recipients');
-        Schema::dropIfExists('messages');
         Schema::dropIfExists('conversation_participants');
+
+
+        Schema::table('conversations', function (Blueprint $table) {
+            $table->dropForeign(['last_message_id']);
+        });
+
+        Schema::dropIfExists('messages');
         Schema::dropIfExists('conversations');
     }
 };

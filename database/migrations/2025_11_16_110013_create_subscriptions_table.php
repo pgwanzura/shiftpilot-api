@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('subscriptions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('agency_id')->constrained()->onDelete('cascade');
-            $table->foreignId('plan_id')->constrained()->onDelete('restrict');
+            $table->foreignId('price_plan_id')->constrained()->onDelete('restrict');
             $table->decimal('amount', 8, 2);
             $table->enum('interval', ['monthly', 'yearly'])->default('monthly');
             $table->enum('status', ['active', 'past_due', 'cancelled', 'suspended'])->default('active');
@@ -23,7 +23,7 @@ return new class extends Migration
 
             $table->index(['agency_id', 'status']);
             $table->index(['status', 'current_period_end']);
-            $table->index(['plan_id']);
+            $table->index(['price_plan_id']);
             $table->unique(['agency_id', 'status'])->where('status', 'active');
         });
     }

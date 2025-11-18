@@ -5,27 +5,31 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\User;
-use App\Services\PermissionService;
-use App\Services\UserRoleService;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 
 class AuthenticatedSessionController extends Controller
 {
-    public function __construct(
-        private PermissionService $permissionService,
-        private UserRoleService $userRoleService
-    ) {}
-
     public function store(LoginRequest $request): JsonResponse
     {
-        $request->authenticate();
+        $user = User::where('email', $request->email)->first();
 
-        $user = Auth::user();
+        if (!$user || !Hash::check($request->password, $user->password)) {
+            throw ValidationException::withMessages([
+                'email' => ['The provided credentials are incorrect.'],
+            ]);
+        }
+
+        if (!$user->isActive()) {
+            throw ValidationException::withMessages([
+                'email' => ['Your account is not active. Please contact support.'],
+            ]);
+        }
+
         $user->recordLogin();
 
-        $request->session()->regenerate();
         $token = $user->createToken('auth-token')->plainTextToken;
 
         $this->loadRoleSpecificRelations($user);
@@ -40,26 +44,18 @@ class AuthenticatedSessionController extends Controller
 
     public function destroy(Request $request): JsonResponse
     {
-        $user = $request->user();
-
-        if ($user) {
-            $user->currentAccessToken()?->delete();
-        }
-
-        Auth::guard('web')->logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        $request->user()->currentAccessToken()->delete();
 
         return response()->json([
             'message' => 'Logged out successfully'
         ]);
     }
 
-    private function loadRoleSpecificRelations(User $user): void
+    protected function loadRoleSpecificRelations($user)
     {
         $relation = match ($user->role) {
             'agency_admin' => 'agency',
-            'employer_admin' => 'employerUser.employer',
+            'employer_admin' => 'employee.employer',
             'employee' => 'employee',
             'contact' => 'contact.employer',
             'agent' => 'agent.agency',
@@ -71,41 +67,35 @@ class AuthenticatedSessionController extends Controller
         }
     }
 
-    private function formatUserResponse(User $user): array
+    protected function formatUserResponse($user)
     {
         return [
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
+            'phone' => $user->phone,
             'role' => $user->role,
-            'display_role' => $this->userRoleService->getDisplayRole($user),
-            'contextual_id' => $this->userRoleService->getContextualId($user),
-            'permissions' => $this->getUserPermissions($user),
-            'profile_complete' => $user->has_complete_profile,
-            'email_verified' => $user->hasVerifiedEmail(),
+            'display_role' => $user->display_role,
             'status' => $user->status,
+            'email_verified' => $user->hasVerifiedEmail(),
+            'last_login_at' => $user->last_login_at,
             'meta' => $user->meta,
         ];
     }
 
-    private function getUserPermissions(User $user): array
+    protected function getUserPermissions($user)
     {
-        $permissions = [
-            'can_approve_timesheets' => $this->permissionService->check($user, 'approve.timesheets'),
-            'can_manage_shifts' => $this->permissionService->check($user, 'manage.shifts'),
-            'can_view_reports' => $this->permissionService->check($user, 'view.reports'),
-            'can_manage_contracts' => $this->permissionService->check($user, 'manage.contracts'),
-        ];
-
-        $roleFlags = [
+        return [
+            'can_approve_timesheets' => $user->canApproveTimesheets(),
+            'can_manage_shifts' => $user->canManageShifts(),
+            'can_view_reports' => $user->canViewReports(),
+            'can_manage_contracts' => $user->canManageContracts(),
             'is_super_admin' => $user->isSuperAdmin(),
-            'is_agency_admin' => $user->role === 'agency_admin',
-            'is_employer_admin' => $user->role === 'employer_admin',
-            'is_employee' => $user->role === 'employee',
-            'is_contact' => $user->role === 'contact',
-            'is_agent' => $user->role === 'agent',
+            'is_agency_admin' => $user->isAgencyAdmin(),
+            'is_employer_admin' => $user->isEmployerAdmin(),
+            'is_employee' => $user->isEmployee(),
+            'is_contact' => $user->isContact(),
+            'is_agent' => $user->isAgent(),
         ];
-
-        return array_merge($permissions, $roleFlags);
     }
 }
