@@ -39,7 +39,7 @@ class AssignmentResource extends JsonResource
             'contract' => new EmployerAgencyContractResource($this->whenLoaded('contract')),
             'agency_employee' => new AgencyEmployeeResource($this->whenLoaded('agencyEmployee')),
             'shift_request' => new ShiftRequestResource($this->whenLoaded('shiftRequest')),
-            'agency_response' => new AgencyResponseResource($this->whenLoaded('agencyResponse')),
+            'agency_assingment_response' => new AgencyAssignmentResponseResource($this->whenLoaded('agencyResponse')),
             'location' => new LocationResource($this->whenLoaded('location')),
             'created_by' => new UserResource($this->whenLoaded('createdBy')),
             'shifts' => ShiftResource::collection($this->whenLoaded('shifts')),

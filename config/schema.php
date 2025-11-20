@@ -783,6 +783,60 @@ return [
         ],
 
         /*
+|--------------------------------------------------------------------------
+| Agency Assignment Response (agency responses to assignments)
+| Agencies submit responses to assignment opportunities
+|--------------------------------------------------------------------------
+*/
+        'agency_assignment_response' => [
+            'table' => 'agency_assignment_responses',
+            'fields' => [
+                'id' => ['type' => 'increments'],
+                'assignment_id' => ['type' => 'foreign', 'references' => 'assignments,id', 'on_delete' => 'cascade'],
+                'agency_id' => ['type' => 'foreign', 'references' => 'agencies,id', 'on_delete' => 'cascade'],
+                'proposal_text' => ['type' => 'text'],
+                'proposed_rate' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2],
+                'estimated_hours' => ['type' => 'integer'],
+                'status' => ['type' => 'string', 'default' => 'submitted'],
+                'rejection_reason' => ['type' => 'text', 'nullable' => true],
+                'submitted_at' => ['type' => 'timestamp', 'nullable' => true],
+                'responded_at' => ['type' => 'timestamp', 'nullable' => true],
+                'created_at' => ['type' => 'timestamp'],
+                'updated_at' => ['type' => 'timestamp']
+            ],
+            'validation' => [
+                'assignment_id' => 'required|exists:assignments,id',
+                'agency_id' => 'required|exists:agencies,id',
+                'proposal_text' => 'required|string|min:10|max:2000',
+                'proposed_rate' => 'required|numeric|min:0|max:10000',
+                'estimated_hours' => 'required|integer|min:1|max:500',
+                'status' => 'required|in:submitted,reviewed,accepted,rejected',
+                'rejection_reason' => 'nullable|string|max:500|required_if:status,rejected'
+            ],
+            'relationships' => [
+                ['type' => 'belongsTo', 'related' => 'Assignment'],
+                ['type' => 'belongsTo', 'related' => 'Agency'],
+            ],
+            'indexes' => [
+                ['fields' => ['assignment_id', 'agency_id'], 'unique' => true],
+                ['fields' => ['agency_id', 'status']],
+                ['fields' => ['assignment_id', 'status']],
+                ['fields' => ['submitted_at']],
+            ],
+            'business_rules' => [
+                'unique_response_per_assignment' => 'Each agency can only submit one response per assignment',
+                'rate_validation' => 'Proposed rate must be within assignment rate constraints',
+                'status_flow' => 'Responses can only move from submitted→reviewed→accepted/rejected',
+                'response_deadline' => 'Responses must be submitted before assignment response deadline',
+                'agency_assignment_response_workflow' => [
+                    'rule' => 'Assignments can receive responses from multiple agencies, employer selects preferred response',
+                    'enforcement' => 'Application workflow + status management',
+                    'description' => 'Enables competitive bidding for assignment opportunities'
+                ],
+            ]
+        ],
+
+        /*
         |--------------------------------------------------------------------------
         | Shift (Actual work period within an assignment)
         | Always linked to an assignment
@@ -1341,7 +1395,7 @@ return [
                 'channel_fallback' => 'Fallback to email if push notification fails'
             ]
         ],
-        
+
         'message' => [
             'table' => 'messages',
             'fields' => [
@@ -1539,6 +1593,16 @@ return [
             '8' => 'Assignment terms (rates, dates) inherited from accepted AgencyResponse'
         ],
 
+        'agency_assignment_response_process' => [
+            '1' => 'Assignment created and published to eligible agencies',
+            '2' => 'Agencies review assignment details and submit agency_assignment_responses',
+            '3' => 'Each agency can submit one response per assignment',
+            '4' => 'Employer reviews all responses and selects preferred agency',
+            '5' => 'Selected agency response moves to accepted status',
+            '6' => 'Other responses are rejected or remain in reviewed status',
+            '7' => 'Accepted response triggers assignment activation'
+        ],
+
         'multi_agency_scenario' => [
             'employee_john' => [
                 'registered_with' => ['Agency A', 'Agency B'],
@@ -1558,9 +1622,6 @@ return [
             '7' => 'Each agency manages payroll independently for their employees'
         ]
     ],
-
-    // ... rest of the configuration remains the same (events, flows, roles, etc.)
-    // Only the entities and business rules sections were updated
 
     /*
     |--------------------------------------------------------------------------
@@ -1692,6 +1753,9 @@ return [
         'time_off.requested' => ['description' => 'Employee requested time off'],
         'time_off.approved' => ['description' => 'Time off request approved'],
         'time_off.rejected' => ['description' => 'Time off request rejected'],
+        'agency_assignment_response.submitted' => ['description' => 'Agency submitted response to assignment'],
+        'agency_assignment_response.accepted' => ['description' => 'Employer accepted agency assignment response'],
+        'agency_assignment_response.rejected' => ['description' => 'Employer rejected agency assignment response'],
     ],
 
     /*
@@ -1882,6 +1946,7 @@ return [
                 'agency_employee:*',
                 'agent:*',
                 'assignment:*',
+                'agency_assignment_response:*',
                 'shift:view,create,update',
                 'timesheet:*',
                 'invoice:view,create',
@@ -1898,6 +1963,7 @@ return [
             'permissions' => [
                 'agency_employee:view',
                 'assignment:view,create,update',
+                'agency_assignment_response:create,view',
                 'shift:view,create,update',
                 'shift_offer:*',
                 'agency_response:create,view',
@@ -1911,6 +1977,7 @@ return [
                 'shift_request:*',
                 'agency_response:view',
                 'assignment:view',
+                'agency_assignment_response:view',
                 'shift:view',
                 'contact:*',
                 'location:*',

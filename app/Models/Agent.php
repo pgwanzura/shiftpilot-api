@@ -14,6 +14,7 @@ class Agent extends Model
     protected $fillable = [
         'agency_id',
         'user_id',
+        'agency_branch_id',
         'branch_id',
         'permissions',
     ];
@@ -31,5 +32,4 @@ class Agent extends Model
     {
         return $this->agency_id;
     }
-
 }

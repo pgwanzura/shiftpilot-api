@@ -30,7 +30,7 @@ return new class extends Migration
         Schema::create('messages', function (Blueprint $table) {
             $table->id();
             $table->foreignId('conversation_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('sender_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->text('content');
             $table->enum('message_type', ['text', 'image', 'file', 'system'])->default('text');
             $table->json('attachments')->nullable();
@@ -41,7 +41,7 @@ return new class extends Migration
 
             $table->index(['conversation_id', 'created_at']);
             $table->index(['conversation_id', 'created_at', 'id']);
-            $table->index(['sender_id', 'created_at']);
+            $table->index(['user_id', 'created_at']);
             $table->index(['conversation_id', 'message_type']);
             $table->index(['deleted_at', 'created_at']);
         });

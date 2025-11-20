@@ -9,6 +9,7 @@ return new class() extends Migration {
     {
         Schema::create('invoices', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('agency_id')->constrained()->onDelete('cascade');
             $table->string('type');
             $table->string('from_type');
             $table->unsignedBigInteger('from_id');
@@ -26,9 +27,11 @@ return new class() extends Migration {
             $table->json('metadata')->nullable();
             $table->timestamps();
 
+            $table->index(['agency_id', 'status']);
             $table->index(['from_type', 'from_id']);
             $table->index(['to_type', 'to_id']);
             $table->index(['status', 'due_date']);
+            $table->index(['agency_id', 'due_date']);
         });
     }
 

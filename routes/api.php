@@ -43,7 +43,8 @@ use App\Http\Controllers\{
     AgencySubscriptionController,
     PricePlanController,
     ConversationController,
-    ConversationParticipantController
+    ConversationParticipantController,
+    AgencyAssignmentResponseController
 };
 use Illuminate\Support\Facades\Route;
 
@@ -164,6 +165,14 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function (): void {
         Route::get('my-assignments', [AssignmentController::class, 'myAssignments']);
     });
 
+    Route::prefix('agency-assignment-responses')->group(function (): void {
+        Route::post('/{response}/accept', [AgencyAssignmentResponseController::class, 'accept']);
+        Route::post('/{response}/reject', [AgencyAssignmentResponseController::class, 'reject']);
+        Route::get('/stats', [AgencyAssignmentResponseController::class, 'stats']);
+        Route::get('/assignments/{assignmentId}', [AgencyAssignmentResponseController::class, 'forAssignment']);
+        Route::get('/agency/my-responses', [AgencyAssignmentResponseController::class, 'forAgency']);
+    });
+
     Route::prefix('employee-preferences')->group(function (): void {
         Route::get('/{employee}/preferences', [EmployeePreferencesController::class, 'getByEmployee']);
         Route::put('/{employee}/preferences', [EmployeePreferencesController::class, 'updateByEmployee']);
@@ -207,8 +216,9 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function (): void {
         Route::put('/shift-requests/{shiftRequest}', [ShiftRequestController::class, 'update']);
         Route::delete('/shift-requests/{shiftRequest}', [ShiftRequestController::class, 'destroy']);
     });
-
     Route::apiResource('agencies', AgencyController::class);
+    Route::apiResource('agency-assignment-responses', AgencyAssignmentResponseController::class);
+    Route::apiResource('agents', AgentController::class);
     Route::apiResource('agents', AgentController::class);
     Route::apiResource('employers', EmployerController::class);
     Route::apiResource('employees', EmployeeController::class)->only(['index', 'show']);
