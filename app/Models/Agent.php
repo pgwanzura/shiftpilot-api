@@ -32,4 +32,9 @@ class Agent extends Model
     {
         return $this->agency_id;
     }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
 }

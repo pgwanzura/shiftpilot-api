@@ -239,7 +239,7 @@ return [
             'validation' => [
                 'user_id' => 'required|exists:users,id',
                 'agency_id' => 'required|exists:agencies,id',
-                'branch_id' => 'nullable|exists:branches,id',
+                'agency_branch_id' => 'nullable|exists:branches,id',
             ],
             'relationships' => [
                 ['type' => 'belongsTo', 'related' => 'Agency'],
@@ -553,7 +553,7 @@ return [
                 ['fields' => ['agency_id', 'employee_id'], 'unique' => true],
                 ['fields' => ['employee_id', 'status']],
                 ['fields' => ['agency_id', 'status']],
-                ['fields' => ['branch_id', 'status']],
+                ['fields' => ['agency_branch_id', 'status']],
             ],
             'business_rules' => [
                 'unique_active_registration' => 'Only one active registration per agency-employee pair',
@@ -775,6 +775,15 @@ return [
                 'location_id' => 'required|exists:locations,id',
                 'start_date' => 'required|date',
                 'assignment_type' => 'required|in:standard,direct'
+            ],
+            'relationships' => [
+                ['type' => 'belongsTo', 'related' => 'EmployerAgencyContract', 'foreign_key' => 'contract_id'],
+                ['type' => 'belongsTo', 'related' => 'AgencyEmployee'],
+                ['type' => 'belongsTo', 'related' => 'ShiftRequest'],
+                ['type' => 'belongsTo', 'related' => 'AgencyResponse'],
+                ['type' => 'belongsTo', 'related' => 'Location'],
+                ['type' => 'hasMany', 'related' => 'Shift'],
+                ['type' => 'hasMany', 'related' => 'AgencyAssignmentResponse'],
             ],
             'business_rules' => [
                 'direct_assignment_validation' => 'Direct assignments require employer admin permissions',

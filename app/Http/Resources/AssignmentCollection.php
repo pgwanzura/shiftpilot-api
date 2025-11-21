@@ -1,31 +1,35 @@
 <?php
+// app/Http/Resources/AssignmentCollection.php
 
 namespace App\Http\Resources;
 
-use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\ResourceCollection;
 
 class AssignmentCollection extends ResourceCollection
 {
-    public $collects = AssignmentResource::class;
-
-    public function toArray(Request $request): array
+    /**
+     * Transform the resource collection into an array.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array|\Illuminate\Contracts\Support\Arrayable|\JsonSerializable
+     */
+    public function toArray($request)
     {
         return [
-            'data' => $this->collection,
+            'data' => AssignmentResource::collection($this->collection),
             'meta' => [
-                'current_page' => $this->currentPage(),
-                'last_page' => $this->lastPage(),
-                'per_page' => $this->perPage(),
-                'total' => $this->total(),
-                'from' => $this->firstItem(),
-                'to' => $this->lastItem(),
+                'current_page' => $this->resource->currentPage(),
+                'last_page' => $this->resource->lastPage(),
+                'per_page' => $this->resource->perPage(),
+                'total' => $this->resource->total(),
+                'from' => $this->resource->firstItem(),
+                'to' => $this->resource->lastItem(),
             ],
             'links' => [
-                'first' => $this->url(1),
-                'last' => $this->url($this->lastPage()),
-                'prev' => $this->previousPageUrl(),
-                'next' => $this->nextPageUrl(),
+                'first' => $this->resource->url(1),
+                'last' => $this->resource->url($this->resource->lastPage()),
+                'prev' => $this->resource->previousPageUrl(),
+                'next' => $this->resource->nextPageUrl(),
             ],
         ];
     }

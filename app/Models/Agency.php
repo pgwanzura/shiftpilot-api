@@ -44,7 +44,7 @@ class Agency extends Model
 
     public function branches(): HasMany
     {
-        return $this->hssMany(AgencyBranch::class);
+        return $this->hasMany(AgencyBranch::class);
     }
 
     public function agents(): HasMany
@@ -72,7 +72,7 @@ class Agency extends Model
         return $this->hasMany(Payroll::class);
     }
 
-    public function AgencyBranches(): HasMany
+    public function agencyBranches(): HasMany
     {
         return $this->hasMany(AgencyBranch::class);
     }

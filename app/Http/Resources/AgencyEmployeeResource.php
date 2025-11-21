@@ -29,17 +29,16 @@ class AgencyEmployeeResource extends JsonResource
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
 
-            // Relationships
             'agency' => new AgencyResource($this->whenLoaded('agency')),
             'employee' => new EmployeeResource($this->whenLoaded('employee')),
             'branch' => new AgencyBranchResource($this->whenLoaded('branch')),
 
             // Links
-            'links' => [
-                'self' => route('agency-employees.show', $this->id),
-                'agency' => route('agencies.show', $this->agency_id),
-                'employee' => route('employees.show', $this->employee_id),
-            ],
+            // 'links' => [
+            //     'self' => route('agency-employees.show', $this->id),
+            //     'agency' => route('agencies.show', $this->agency_id),
+            //     'employee' => route('employees.show', $this->employee_id),
+            // ],
         ];
     }
 

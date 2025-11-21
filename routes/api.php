@@ -163,6 +163,7 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function (): void {
         Route::post('{assignment}/extend', [AssignmentController::class, 'extend']);
         Route::get('statistics', [AssignmentController::class, 'statistics']);
         Route::get('my-assignments', [AssignmentController::class, 'myAssignments']);
+        Route::get('/debug', [AssignmentController::class, 'debug']);
     });
 
     Route::prefix('agency-assignment-responses')->group(function (): void {

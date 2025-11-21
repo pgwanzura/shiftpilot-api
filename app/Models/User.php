@@ -3,13 +3,17 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasApiTokens;
+    use HasApiTokens;
+    use HasFactory;
+    use Notifiable;
 
     protected $fillable = [
         'name',
@@ -20,7 +24,7 @@ class User extends Authenticatable
         'status',
         'meta',
         'email_verified_at',
-        'last_login_at'
+        'last_login_at',
     ];
 
     protected $hidden = [
@@ -34,24 +38,72 @@ class User extends Authenticatable
         'meta' => 'array',
     ];
 
-    public function agent()
+    public function agent(): HasOne
     {
         return $this->hasOne(Agent::class);
     }
 
-    public function employee()
+    public function employee(): HasOne
     {
         return $this->hasOne(Employee::class);
     }
 
-    public function contact()
+    public function contact(): HasOne
     {
         return $this->hasOne(Contact::class);
     }
 
-    public function agency()
+    public function agency(): BelongsTo
     {
         return $this->belongsTo(Agency::class);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->isSuperAdmin();
+    }
+
+    public function isAgency(): bool
+    {
+        return $this->isAgencyAdmin() || $this->isAgent();
+    }
+
+    public function isEmployer(): bool
+    {
+        return $this->isEmployerAdmin() || $this->isContact();
+    }
+
+    public function getAgencyId(): ?int
+    {
+        if ($this->isAgencyAdmin()) {
+            return $this->agency?->id;
+        }
+
+        if ($this->isAgent()) {
+            return $this->agent?->agency?->id;
+        }
+
+        return null;
+    }
+
+    public function getEmployerId(): ?int
+    {
+        if ($this->isEmployerAdmin()) {
+            return $this->employee?->employer?->id;
+        }
+
+        if ($this->isContact()) {
+            return $this->contact?->employer?->id;
+        }
+
+        return null;
+    }
+
+    public function canApproveAssignments(): bool
+    {
+        return $this->hasPermission('assignment:approve') ||
+            $this->hasPermission('assignment:manage') ||
+            $this->isAdmin();
     }
 
     public function isSuperAdmin(): bool
@@ -66,7 +118,7 @@ class User extends Authenticatable
 
     public function hasVerifiedEmail(): bool
     {
-        return !is_null($this->email_verified_at);
+        return $this->email_verified_at !== null;
     }
 
     public function isActive(): bool
@@ -87,7 +139,6 @@ class User extends Authenticatable
     public function getHasCompleteProfileAttribute(): bool
     {
         $requiredFields = ['name', 'email', 'phone'];
-
         foreach ($requiredFields as $field) {
             if (empty($this->$field)) {
                 return false;
@@ -278,7 +329,7 @@ class User extends Authenticatable
         };
     }
 
-    public function getContextualIdAttribute()
+    public function getContextualIdAttribute(): ?int
     {
         return match ($this->role) {
             'agency_admin' => $this->agency?->id,
@@ -290,11 +341,41 @@ class User extends Authenticatable
         };
     }
 
+    public function getOrganizationId(): ?int
+    {
+        return match ($this->role) {
+            'agency_admin', 'agent' => $this->getAgencyId(),
+            'employer_admin', 'contact' => $this->getEmployerId(),
+            'employee' => $this->employee?->id,
+            default => null,
+        };
+    }
+
+    public function hasAnyRole(array $roles): bool
+    {
+        return in_array($this->role, $roles, true);
+    }
+
+    public function hasAllRoles(array $roles): bool
+    {
+        return count(array_intersect([$this->role], $roles)) === count($roles);
+    }
+
+    public static function getAgencyRoles(): array
+    {
+        return ['agency_admin', 'agent'];
+    }
+
+    public static function getEmployerRoles(): array
+    {
+        return ['employer_admin', 'contact'];
+    }
+
     protected function hasPermission(string $permission): bool
     {
         $rolePermissions = $this->getRolePermissions();
 
-        if (in_array('*', $rolePermissions)) {
+        if (in_array('*', $rolePermissions, true)) {
             return true;
         }
 
@@ -304,12 +385,12 @@ class User extends Authenticatable
             }
 
             if (str_contains($rolePermission, ':')) {
-                [$resource, $actions] = explode(':', $rolePermission);
-                [$requiredResource, $requiredAction] = explode(':', $permission);
+                [$resource, $actions] = explode(':', $rolePermission, 2);
+                [$requiredResource, $requiredAction] = explode(':', $permission, 2);
 
                 if ($resource === $requiredResource) {
                     $actionList = explode(',', $actions);
-                    if (in_array('*', $actionList) || in_array($requiredAction, $actionList)) {
+                    if (in_array('*', $actionList, true) || in_array($requiredAction, $actionList, true)) {
                         return true;
                     }
                 }
@@ -321,7 +402,13 @@ class User extends Authenticatable
 
     protected function getRolePermissions(): array
     {
-        return match ($this->role) {
+        static $permissionsCache = [];
+
+        if (isset($permissionsCache[$this->role])) {
+            return $permissionsCache[$this->role];
+        }
+
+        $permissions = match ($this->role) {
             'super_admin' => ['*'],
             'agency_admin' => [
                 'employee:*',
@@ -376,5 +463,8 @@ class User extends Authenticatable
             ],
             default => [],
         };
+
+        $permissionsCache[$this->role] = $permissions;
+        return $permissions;
     }
 }

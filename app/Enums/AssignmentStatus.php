@@ -9,6 +9,7 @@ enum AssignmentStatus: string
     case COMPLETED = 'completed';
     case CANCELLED = 'cancelled';
     case SUSPENDED = 'suspended';
+    case PAUSED = 'paused';
 
     public function label(): string
     {
@@ -18,6 +19,7 @@ enum AssignmentStatus: string
             self::COMPLETED => 'Completed',
             self::CANCELLED => 'Cancelled',
             self::SUSPENDED => 'Suspended',
+            self::PAUSED => 'Paused',
         };
     }
 
@@ -28,7 +30,7 @@ enum AssignmentStatus: string
 
     public function canBeModified(): bool
     {
-        return in_array($this, [self::PENDING, self::ACTIVE]);
+        return in_array($this, [self::PENDING, self::ACTIVE, self::PAUSED]);
     }
 
     public static function activeStates(): array
