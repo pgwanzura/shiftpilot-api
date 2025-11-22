@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Agent extends Model
 {
@@ -14,13 +13,11 @@ class Agent extends Model
     protected $fillable = [
         'agency_id',
         'user_id',
-        'agency_branch_id',
-        'branch_id',
-        'permissions',
     ];
 
     protected $casts = [
-        'permissions' => 'array',
+        'agency_id' => 'integer',
+        'user_id' => 'integer',
     ];
 
     public function agency(): BelongsTo
@@ -28,13 +25,18 @@ class Agent extends Model
         return $this->belongsTo(Agency::class);
     }
 
-    public function getAgencyId(): ?int
-    {
-        return $this->agency_id;
-    }
-
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function isActive(): bool
+    {
+        return $this->relationLoaded('user') && $this->user->isActive();
+    }
+
+    public function belongsToAgency(int $agencyId): bool
+    {
+        return $this->agency_id === $agencyId;
     }
 }

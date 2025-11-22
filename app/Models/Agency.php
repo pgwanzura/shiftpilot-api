@@ -2,12 +2,10 @@
 
 namespace App\Models;
 
-use App\Enums\AgencyStatus;
 use App\Enums\SubscriptionStatus;
 use App\Events\Agency\AgencyStatusChanged;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
@@ -25,19 +23,23 @@ class Agency extends Model
         'address_line2',
         'city',
         'country',
-        'country',
         'longitude',
         'latitude',
         'postcode',
         'default_markup_percent',
-        'subscription_status',
         'meta',
+    ];
+
+    protected $guarded = [
+        'subscription_status',
     ];
 
     protected $casts = [
         'default_markup_percent' => 'decimal:2',
         'subscription_status' => SubscriptionStatus::class,
         'meta' => 'array',
+        'latitude' => 'decimal:8',
+        'longitude' => 'decimal:8',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -70,11 +72,6 @@ class Agency extends Model
     public function payrolls(): HasMany
     {
         return $this->hasMany(Payroll::class);
-    }
-
-    public function agencyBranches(): HasMany
-    {
-        return $this->hasMany(AgencyBranch::class);
     }
 
     public function agencyResponses(): HasMany
@@ -137,12 +134,18 @@ class Agency extends Model
 
     public function calculateMarkupAmount(float $baseAmount): float
     {
-        return $baseAmount * ($this->default_markup_percent / 100);
+        $markupPercent = $this->default_markup_percent ?? 0;
+        return $baseAmount * ($markupPercent / 100);
     }
 
     public function getMarkedUpAmount(float $baseAmount): float
     {
         return $baseAmount + $this->calculateMarkupAmount($baseAmount);
+    }
+
+    public function updateSubscriptionStatus(SubscriptionStatus $status): void
+    {
+        $this->forceFill(['subscription_status' => $status])->save();
     }
 
     protected static function booted(): void
@@ -154,8 +157,11 @@ class Agency extends Model
         });
 
         static::updated(function (Agency $agency) {
-            if ($agency->isDirty('subscription_status')) {
-                AgencyStatusChanged::dispatch($agency, $agency->getOriginal('subscription_status'));
+            if ($agency->wasChanged('subscription_status')) {
+                AgencyStatusChanged::dispatch(
+                    $agency,
+                    $agency->getOriginal('subscription_status')
+                );
             }
         });
     }

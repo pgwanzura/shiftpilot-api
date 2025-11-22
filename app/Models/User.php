@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Cache;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -19,10 +20,13 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
-        'role',
         'phone',
-        'status',
         'meta',
+    ];
+
+    protected $guarded = [
+        'role',
+        'status',
         'email_verified_at',
         'last_login_at',
     ];
@@ -58,9 +62,34 @@ class User extends Authenticatable
         return $this->belongsTo(Agency::class);
     }
 
-    public function isAdmin(): bool
+    public function isSuperAdmin(): bool
     {
-        return $this->isSuperAdmin();
+        return $this->role === 'super_admin';
+    }
+
+    public function isAgencyAdmin(): bool
+    {
+        return $this->role === 'agency_admin';
+    }
+
+    public function isAgent(): bool
+    {
+        return $this->role === 'agent';
+    }
+
+    public function isEmployerAdmin(): bool
+    {
+        return $this->role === 'employer_admin';
+    }
+
+    public function isContact(): bool
+    {
+        return $this->role === 'contact';
+    }
+
+    public function isEmployee(): bool
+    {
+        return $this->role === 'employee';
     }
 
     public function isAgency(): bool
@@ -73,47 +102,14 @@ class User extends Authenticatable
         return $this->isEmployerAdmin() || $this->isContact();
     }
 
-    public function getAgencyId(): ?int
-    {
-        if ($this->isAgencyAdmin()) {
-            return $this->agency?->id;
-        }
-
-        if ($this->isAgent()) {
-            return $this->agent?->agency?->id;
-        }
-
-        return null;
-    }
-
-    public function getEmployerId(): ?int
-    {
-        if ($this->isEmployerAdmin()) {
-            return $this->employee?->employer?->id;
-        }
-
-        if ($this->isContact()) {
-            return $this->contact?->employer?->id;
-        }
-
-        return null;
-    }
-
-    public function canApproveAssignments(): bool
-    {
-        return $this->hasPermission('assignment:approve') ||
-            $this->hasPermission('assignment:manage') ||
-            $this->isAdmin();
-    }
-
-    public function isSuperAdmin(): bool
-    {
-        return $this->role === 'super_admin';
-    }
-
     public function hasRole(string $role): bool
     {
         return $this->role === $role;
+    }
+
+    public function hasAnyRole(array $roles): bool
+    {
+        return in_array($this->role, $roles, true);
     }
 
     public function hasVerifiedEmail(): bool
@@ -126,219 +122,35 @@ class User extends Authenticatable
         return $this->status === 'active';
     }
 
-    public function recordLogin(): void
+    public function getAgencyId(): ?int
     {
-        $this->update(['last_login_at' => now()]);
-    }
-
-    public function markAsVerified(): void
-    {
-        $this->update(['email_verified_at' => now()]);
-    }
-
-    public function getHasCompleteProfileAttribute(): bool
-    {
-        $requiredFields = ['name', 'email', 'phone'];
-        foreach ($requiredFields as $field) {
-            if (empty($this->$field)) {
-                return false;
+        if ($this->isAgencyAdmin() || $this->isAgent()) {
+            if ($this->relationLoaded('agent')) {
+                return $this->agent?->agency_id;
             }
+            return $this->agent()->value('agency_id');
         }
 
-        if (!$this->hasVerifiedEmail()) {
-            return false;
+        return null;
+    }
+
+    public function getEmployerId(): ?int
+    {
+        if ($this->isEmployerAdmin()) {
+            if ($this->relationLoaded('employee')) {
+                return $this->employee?->employer_id;
+            }
+            return $this->employee()->value('employer_id');
         }
 
-        return match ($this->role) {
-            'agency_admin' => $this->agency !== null,
-            'employer_admin' => $this->employee !== null && $this->employee->employer !== null,
-            'employee' => $this->employee !== null,
-            'contact' => $this->contact !== null && $this->contact->employer !== null,
-            'agent' => $this->agent !== null && $this->agent->agency !== null,
-            default => true,
-        };
-    }
+        if ($this->isContact()) {
+            if ($this->relationLoaded('contact')) {
+                return $this->contact?->employer_id;
+            }
+            return $this->contact()->value('employer_id');
+        }
 
-    public function canApproveTimesheets(): bool
-    {
-        return $this->hasPermission('timesheet:approve');
-    }
-
-    public function canManageShifts(): bool
-    {
-        return $this->hasPermission('shift:manage');
-    }
-
-    public function canViewReports(): bool
-    {
-        return $this->hasPermission('revenue:view') ||
-            $this->hasPermission('analytics:view') ||
-            $this->hasPermission('performance:view');
-    }
-
-    public function canManageContracts(): bool
-    {
-        return $this->hasPermission('contract:manage');
-    }
-
-    public function canManageEmployees(): bool
-    {
-        return $this->hasPermission('employee:manage');
-    }
-
-    public function canManageAgents(): bool
-    {
-        return $this->hasPermission('agent:manage');
-    }
-
-    public function canManageShiftRequests(): bool
-    {
-        return $this->hasPermission('shift_request:manage');
-    }
-
-    public function canManageAssignments(): bool
-    {
-        return $this->hasPermission('assignment:manage');
-    }
-
-    public function canManageAvailability(): bool
-    {
-        return $this->hasPermission('availability:manage');
-    }
-
-    public function canApproveTimeOff(): bool
-    {
-        return $this->hasPermission('time_off:approve');
-    }
-
-    public function canManageInvoices(): bool
-    {
-        return $this->hasPermission('invoice:manage');
-    }
-
-    public function canProcessPayroll(): bool
-    {
-        return $this->hasPermission('payroll:process');
-    }
-
-    public function canManageAgencySettings(): bool
-    {
-        return $this->hasPermission('agency:configure');
-    }
-
-    public function canManageBilling(): bool
-    {
-        return $this->hasPermission('billing:manage');
-    }
-
-    public function canManageContacts(): bool
-    {
-        return $this->hasPermission('contact:manage');
-    }
-
-    public function canManageLocations(): bool
-    {
-        return $this->hasPermission('location:manage');
-    }
-
-    public function canViewStaff(): bool
-    {
-        return $this->hasPermission('staff:view');
-    }
-
-    public function canCreateShiftRequests(): bool
-    {
-        return $this->hasPermission('shift_request:create');
-    }
-
-    public function canManageOwnProfile(): bool
-    {
-        return $this->hasPermission('profile:manage');
-    }
-
-    public function canManageOwnAvailability(): bool
-    {
-        return $this->hasPermission('availability:manage:own');
-    }
-
-    public function canViewOwnTimesheets(): bool
-    {
-        return $this->hasPermission('timesheet:view:own');
-    }
-
-    public function canCreateOwnTimesheets(): bool
-    {
-        return $this->hasPermission('timesheet:create:own');
-    }
-
-    public function canViewOwnAssignments(): bool
-    {
-        return $this->hasPermission('assignment:view:own');
-    }
-
-    public function canRequestTimeOff(): bool
-    {
-        return $this->hasPermission('time_off:request');
-    }
-
-    public function canViewOwnShifts(): bool
-    {
-        return $this->hasPermission('shift:view:own');
-    }
-
-    public function canRespondToShiftOffers(): bool
-    {
-        return $this->hasPermission('shift_offer:respond:own');
-    }
-
-    public function isAgencyAdmin(): bool
-    {
-        return $this->role === 'agency_admin';
-    }
-
-    public function isEmployerAdmin(): bool
-    {
-        return $this->role === 'employer_admin';
-    }
-
-    public function isEmployee(): bool
-    {
-        return $this->role === 'employee';
-    }
-
-    public function isContact(): bool
-    {
-        return $this->role === 'contact';
-    }
-
-    public function isAgent(): bool
-    {
-        return $this->role === 'agent';
-    }
-
-    public function getDisplayRoleAttribute(): string
-    {
-        return match ($this->role) {
-            'super_admin' => 'Super Administrator',
-            'agency_admin' => 'Agency Administrator',
-            'employer_admin' => 'Employer Administrator',
-            'employee' => 'Employee',
-            'contact' => 'Contact',
-            'agent' => 'Agent',
-            default => 'User',
-        };
-    }
-
-    public function getContextualIdAttribute(): ?int
-    {
-        return match ($this->role) {
-            'agency_admin' => $this->agency?->id,
-            'employer_admin' => $this->employee?->employer?->id,
-            'employee' => $this->employee?->id,
-            'contact' => $this->contact?->employer?->id,
-            'agent' => $this->agent?->agency?->id,
-            default => null,
-        };
+        return null;
     }
 
     public function getOrganizationId(): ?int
@@ -351,14 +163,88 @@ class User extends Authenticatable
         };
     }
 
-    public function hasAnyRole(array $roles): bool
+    public function recordLogin(): void
     {
-        return in_array($this->role, $roles, true);
+        $this->forceFill(['last_login_at' => now()])->save();
     }
 
-    public function hasAllRoles(array $roles): bool
+    public function markAsVerified(): void
     {
-        return count(array_intersect([$this->role], $roles)) === count($roles);
+        $this->forceFill(['email_verified_at' => now()])->save();
+    }
+
+    public function activate(): void
+    {
+        $this->forceFill(['status' => 'active'])->save();
+    }
+
+    public function deactivate(): void
+    {
+        $this->forceFill(['status' => 'inactive'])->save();
+    }
+
+    public function hasCompleteProfile(): bool
+    {
+        $requiredFields = ['name', 'email', 'phone'];
+
+        foreach ($requiredFields as $field) {
+            if (empty($this->$field)) {
+                return false;
+            }
+        }
+
+        if (!$this->hasVerifiedEmail()) {
+            return false;
+        }
+
+        return match ($this->role) {
+            'agency_admin' => $this->agency_id !== null,
+            'employer_admin' => $this->relationLoaded('employee') &&
+                $this->employee !== null &&
+                $this->employee->employer_id !== null,
+            'employee' => $this->relationLoaded('employee') && $this->employee !== null,
+            'contact' => $this->relationLoaded('contact') &&
+                $this->contact !== null &&
+                $this->contact->employer_id !== null,
+            'agent' => $this->relationLoaded('agent') &&
+                $this->agent !== null &&
+                $this->agent->agency_id !== null,
+            default => true,
+        };
+    }
+
+    public function hasPermission(string $permission): bool
+    {
+        $rolePermissions = $this->getCachedPermissions();
+
+        if (in_array('*', $rolePermissions, true)) {
+            return true;
+        }
+
+        foreach ($rolePermissions as $rolePermission) {
+            if ($rolePermission === $permission) {
+                return true;
+            }
+
+            if ($this->matchesWildcardPermission($rolePermission, $permission)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function getDisplayRole(): string
+    {
+        return match ($this->role) {
+            'super_admin' => 'Super Administrator',
+            'agency_admin' => 'Agency Administrator',
+            'employer_admin' => 'Employer Administrator',
+            'employee' => 'Employee',
+            'contact' => 'Contact',
+            'agent' => 'Agent',
+            default => 'User',
+        };
     }
 
     public static function getAgencyRoles(): array
@@ -371,44 +257,51 @@ class User extends Authenticatable
         return ['employer_admin', 'contact'];
     }
 
-    protected function hasPermission(string $permission): bool
+    public function clearPermissionsCache(): void
     {
-        $rolePermissions = $this->getRolePermissions();
+        Cache::forget($this->getPermissionsCacheKey());
+    }
 
-        if (in_array('*', $rolePermissions, true)) {
-            return true;
+    protected function getCachedPermissions(): array
+    {
+        return Cache::remember(
+            $this->getPermissionsCacheKey(),
+            3600,
+            fn() => $this->getRolePermissions()
+        );
+    }
+
+    protected function getPermissionsCacheKey(): string
+    {
+        return "user.{$this->id}.permissions.{$this->role}";
+    }
+
+    protected function matchesWildcardPermission(string $rolePermission, string $requiredPermission): bool
+    {
+        if (!str_contains($rolePermission, ':')) {
+            return false;
         }
 
-        foreach ($rolePermissions as $rolePermission) {
-            if ($rolePermission === $permission) {
-                return true;
-            }
+        [$resource, $actions] = explode(':', $rolePermission, 2);
 
-            if (str_contains($rolePermission, ':')) {
-                [$resource, $actions] = explode(':', $rolePermission, 2);
-                [$requiredResource, $requiredAction] = explode(':', $permission, 2);
-
-                if ($resource === $requiredResource) {
-                    $actionList = explode(',', $actions);
-                    if (in_array('*', $actionList, true) || in_array($requiredAction, $actionList, true)) {
-                        return true;
-                    }
-                }
-            }
+        if (!str_contains($requiredPermission, ':')) {
+            return false;
         }
 
-        return false;
+        [$requiredResource, $requiredAction] = explode(':', $requiredPermission, 2);
+
+        if ($resource !== $requiredResource) {
+            return false;
+        }
+
+        $actionList = explode(',', $actions);
+
+        return in_array('*', $actionList, true) || in_array($requiredAction, $actionList, true);
     }
 
     protected function getRolePermissions(): array
     {
-        static $permissionsCache = [];
-
-        if (isset($permissionsCache[$this->role])) {
-            return $permissionsCache[$this->role];
-        }
-
-        $permissions = match ($this->role) {
+        return match ($this->role) {
             'super_admin' => ['*'],
             'agency_admin' => [
                 'employee:*',
@@ -463,8 +356,14 @@ class User extends Authenticatable
             ],
             default => [],
         };
+    }
 
-        $permissionsCache[$this->role] = $permissions;
-        return $permissions;
+    protected static function booted(): void
+    {
+        static::updated(function (User $user) {
+            if ($user->wasChanged('role')) {
+                $user->clearPermissionsCache();
+            }
+        });
     }
 }

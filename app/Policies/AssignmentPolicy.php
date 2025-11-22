@@ -1,344 +1,328 @@
 <?php
-// app/Policies/AssignmentPolicy.php
 
 namespace App\Policies;
 
+use App\Enums\AssignmentStatus;
 use App\Models\Assignment;
 use App\Models\User;
-use App\Enums\AssignmentStatus;
 
 class AssignmentPolicy
 {
-
     public function viewAny(User $user): bool
     {
-        return $user->isAdmin() || $user->isAgency() || $user->isEmployer();
+        return $user->isSuperAdmin() ||
+            $user->isAgency() ||
+            $user->isEmployer() ||
+            $user->isEmployee();
     }
 
     public function view(User $user, Assignment $assignment): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 
         if ($user->isAgency()) {
-            return $assignment->agencyEmployee->agency_id === $user->getAgencyId();
+            return $this->userOwnsAgencyAssignment($user, $assignment);
         }
 
         if ($user->isEmployer()) {
-            return $assignment->contract->employer_id === $user->getEmployerId();
+            return $this->userOwnsEmployerAssignment($user, $assignment);
         }
 
         if ($user->isEmployee()) {
-            return $assignment->agencyEmployee->employee->user_id === $user->id;
+            return $this->userIsAssignedEmployee($user, $assignment);
         }
 
         return false;
     }
 
-    /**
-     * Determine whether the user can create models.
-     */
     public function create(User $user): bool
     {
-        return $user->isAdmin() || $user->isAgency();
+        return $user->isSuperAdmin() || $user->isAgency();
     }
 
-    /**
-     * Determine whether the user can update the model.
-     */
     public function update(User $user, Assignment $assignment): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 
-        if ($user->isAgency()) {
-            return $assignment->agencyEmployee->agency_id === $user->getAgencyId() &&
-                $assignment->canBeUpdated();
+        if ($user->isAgency() && $this->userOwnsAgencyAssignment($user, $assignment)) {
+            return $assignment->canBeUpdated();
         }
 
         return false;
     }
 
-    /**
-     * Determine whether the user can delete the model.
-     */
     public function delete(User $user, Assignment $assignment): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 
-        if ($user->isAgencyAdmin()) {
-            return $assignment->agencyEmployee->agency_id === $user->getAgencyId() &&
-                $assignment->canBeDeleted();
+        if ($user->isAgencyAdmin() && $this->userOwnsAgencyAssignment($user, $assignment)) {
+            return $assignment->canBeDeleted();
         }
 
         return false;
     }
 
-    /**
-     * Determine whether the user can restore the model.
-     */
     public function restore(User $user, Assignment $assignment): bool
     {
-        return $user->isAdmin();
+        return $user->isSuperAdmin();
     }
 
-    /**
-     * Determine whether the user can permanently delete the model.
-     */
     public function forceDelete(User $user, Assignment $assignment): bool
     {
-        return $user->isAdmin();
+        return $user->isSuperAdmin();
     }
 
-    /**
-     * Determine whether the user can change assignment status.
-     */
     public function changeStatus(User $user, Assignment $assignment): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 
-        if ($user->isAgency()) {
-            return $assignment->agencyEmployee->agency_id === $user->getAgencyId() &&
-                $assignment->canChangeStatus();
+        if ($user->isAgency() && $this->userOwnsAgencyAssignment($user, $assignment)) {
+            return $assignment->canBeUpdated();
         }
 
-        // Employers can only complete or cancel assignments
-        if ($user->isEmployer()) {
-            return $assignment->contract->employer_id === $user->getEmployerId() &&
-                in_array($assignment->status, [AssignmentStatus::ACTIVE, AssignmentStatus::PENDING]) &&
-                $user->canApproveAssignments();
+        if (
+            $user->isEmployer() &&
+            $this->userOwnsEmployerAssignment($user, $assignment) &&
+            $user->hasPermission('assignment:approve')
+        ) {
+            return in_array($assignment->status, [
+                AssignmentStatus::ACTIVE,
+                AssignmentStatus::PENDING
+            ], true);
         }
 
         return false;
     }
 
-    /**
-     * Determine whether the user can view financial information.
-     */
     public function viewFinancials(User $user, Assignment $assignment): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 
-        if ($user->isAgency()) {
-            return $assignment->agencyEmployee->agency_id === $user->getAgencyId();
-        }
-
-        return false;
+        return $user->isAgency() && $this->userOwnsAgencyAssignment($user, $assignment);
     }
 
-    /**
-     * Determine whether the user can manage shifts for the assignment.
-     */
     public function manageShifts(User $user, Assignment $assignment): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 
-        if ($user->isAgency()) {
-            return $assignment->agencyEmployee->agency_id === $user->getAgencyId() &&
-                $assignment->isActive();
+        if (
+            $user->isAgency() &&
+            $this->userOwnsAgencyAssignment($user, $assignment) &&
+            $assignment->isActive()
+        ) {
+            return true;
         }
 
-        // Employers can manage shifts for their assignments
-        if ($user->isEmployer()) {
-            return $assignment->contract->employer_id === $user->getEmployerId() &&
-                $assignment->isActive() &&
-                $user->canApproveAssignments();
+        if (
+            $user->isEmployer() &&
+            $this->userOwnsEmployerAssignment($user, $assignment) &&
+            $assignment->isActive() &&
+            $user->hasPermission('assignment:approve')
+        ) {
+            return true;
         }
 
         return false;
     }
 
-    /**
-     * Determine whether the user can complete the assignment.
-     */
     public function complete(User $user, Assignment $assignment): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 
-        // Agency can complete their assignments
-        if ($user->isAgency()) {
-            return $assignment->agencyEmployee->agency_id === $user->getAgencyId() &&
-                $assignment->canBeCompleted();
+        if (
+            $user->isAgency() &&
+            $this->userOwnsAgencyAssignment($user, $assignment) &&
+            $assignment->canBeCompleted()
+        ) {
+            return true;
         }
 
-        // Employers can also complete assignments
-        if ($user->isEmployer()) {
-            return $assignment->contract->employer_id === $user->getEmployerId() &&
-                $assignment->canBeCompleted() &&
-                $user->canApproveAssignments();
+        if (
+            $user->isEmployer() &&
+            $this->userOwnsEmployerAssignment($user, $assignment) &&
+            $assignment->canBeCompleted() &&
+            $user->hasPermission('assignment:approve')
+        ) {
+            return true;
         }
 
         return false;
     }
 
-    /**
-     * Determine whether the user can suspend the assignment.
-     */
     public function suspend(User $user, Assignment $assignment): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 
-        // Only agency can suspend assignments
-        if ($user->isAgency()) {
-            return $assignment->agencyEmployee->agency_id === $user->getAgencyId() &&
-                $assignment->canBeSuspended();
-        }
-
-        return false;
+        return $user->isAgency() &&
+            $this->userOwnsAgencyAssignment($user, $assignment) &&
+            $assignment->canBeSuspended();
     }
 
-    /**
-     * Determine whether the user can reactivate the assignment.
-     */
     public function reactivate(User $user, Assignment $assignment): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 
-        // Only agency can reactivate suspended assignments
-        if ($user->isAgency()) {
-            return $assignment->agencyEmployee->agency_id === $user->getAgencyId() &&
-                $assignment->canBeReactivated();
-        }
-
-        return false;
+        return $user->isAgency() &&
+            $this->userOwnsAgencyAssignment($user, $assignment) &&
+            $assignment->canBeReactivated();
     }
 
-    /**
-     * Determine whether the user can cancel the assignment.
-     */
     public function cancel(User $user, Assignment $assignment): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 
-        if ($user->isAgency()) {
-            return $assignment->agencyEmployee->agency_id === $user->getAgencyId() &&
-                in_array($assignment->status, [AssignmentStatus::PENDING, AssignmentStatus::ACTIVE]);
+        $canCancel = in_array($assignment->status, [
+            AssignmentStatus::PENDING,
+            AssignmentStatus::ACTIVE
+        ], true);
+
+        if (
+            $user->isAgency() &&
+            $this->userOwnsAgencyAssignment($user, $assignment) &&
+            $canCancel
+        ) {
+            return true;
         }
 
-        // Employers can cancel their assignments
-        if ($user->isEmployer()) {
-            return $assignment->contract->employer_id === $user->getEmployerId() &&
-                in_array($assignment->status, [AssignmentStatus::PENDING, AssignmentStatus::ACTIVE]) &&
-                $user->canApproveAssignments();
+        if (
+            $user->isEmployer() &&
+            $this->userOwnsEmployerAssignment($user, $assignment) &&
+            $canCancel &&
+            $user->hasPermission('assignment:approve')
+        ) {
+            return true;
         }
 
         return false;
     }
 
-    /**
-     * Determine whether the user can extend the assignment.
-     */
     public function extend(User $user, Assignment $assignment): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 
-        if ($user->isAgency()) {
-            return $assignment->agencyEmployee->agency_id === $user->getAgencyId() &&
-                $assignment->isActive() &&
-                $assignment->end_date !== null;
+        $canExtend = $assignment->isActive() && $assignment->end_date !== null;
+
+        if (
+            $user->isAgency() &&
+            $this->userOwnsAgencyAssignment($user, $assignment) &&
+            $canExtend
+        ) {
+            return true;
         }
 
-        // Employers can extend their assignments
-        if ($user->isEmployer()) {
-            return $assignment->contract->employer_id === $user->getEmployerId() &&
-                $assignment->isActive() &&
-                $assignment->end_date !== null &&
-                $user->canApproveAssignments();
+        if (
+            $user->isEmployer() &&
+            $this->userOwnsEmployerAssignment($user, $assignment) &&
+            $canExtend &&
+            $user->hasPermission('assignment:approve')
+        ) {
+            return true;
         }
 
         return false;
     }
 
-    /**
-     * Determine whether the user can view assignment analytics.
-     */
     public function viewAnalytics(User $user, Assignment $assignment): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 
-        if ($user->isAgency()) {
-            return $assignment->agencyEmployee->agency_id === $user->getAgencyId();
+        if ($user->isAgency() && $this->userOwnsAgencyAssignment($user, $assignment)) {
+            return true;
         }
 
-        if ($user->isEmployer()) {
-            return $assignment->contract->employer_id === $user->getEmployerId();
+        if ($user->isEmployer() && $this->userOwnsEmployerAssignment($user, $assignment)) {
+            return true;
         }
 
         return false;
     }
 
-    /**
-     * Determine whether the user can generate reports for the assignment.
-     */
     public function generateReports(User $user, Assignment $assignment): bool
     {
         return $this->viewAnalytics($user, $assignment);
     }
 
-    /**
-     * Determine whether the user can manage assignment notes.
-     */
     public function manageNotes(User $user, Assignment $assignment): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 
-        if ($user->isAgency()) {
-            return $assignment->agencyEmployee->agency_id === $user->getAgencyId();
+        if ($user->isAgency() && $this->userOwnsAgencyAssignment($user, $assignment)) {
+            return true;
         }
 
-        if ($user->isEmployer()) {
-            return $assignment->contract->employer_id === $user->getEmployerId();
+        if ($user->isEmployer() && $this->userOwnsEmployerAssignment($user, $assignment)) {
+            return true;
         }
 
         return false;
     }
 
-    /**
-     * Determine whether the user can view assignment history.
-     */
     public function viewHistory(User $user, Assignment $assignment): bool
     {
         return $this->view($user, $assignment);
     }
 
-    /**
-     * Determine whether the user can clone the assignment.
-     */
     public function clone(User $user, Assignment $assignment): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isSuperAdmin()) {
             return true;
         }
 
-        if ($user->isAgency()) {
-            return $assignment->agencyEmployee->agency_id === $user->getAgencyId() &&
-                $assignment->isCompleted();
+        return $user->isAgency() &&
+            $this->userOwnsAgencyAssignment($user, $assignment) &&
+            $assignment->isCompleted();
+    }
+
+    protected function userOwnsAgencyAssignment(User $user, Assignment $assignment): bool
+    {
+        $agencyId = $user->getAgencyId();
+
+        if (!$agencyId) {
+            return false;
         }
 
-        return false;
+        return $assignment->agencyEmployee?->agency_id === $agencyId;
+    }
+
+    protected function userOwnsEmployerAssignment(User $user, Assignment $assignment): bool
+    {
+        $employerId = $user->getEmployerId();
+
+        if (!$employerId) {
+            return false;
+        }
+
+        return $assignment->contract?->employer_id === $employerId;
+    }
+
+    protected function userIsAssignedEmployee(User $user, Assignment $assignment): bool
+    {
+        return $assignment->agencyEmployee?->employee?->user_id === $user->id;
     }
 }

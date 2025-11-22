@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Services\UserRoleService;
-use App\Services\UserProfileService;
+
 use App\Services\PermissionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,7 +13,7 @@ class UserController extends Controller
 {
     public function __construct(
         private UserRoleService $roleService,
-        private UserProfileService $profileService,
+
         private PermissionService $permissionService
     ) {}
 
@@ -25,7 +25,7 @@ class UserController extends Controller
         return response()->json([
             'user' => $user,
             'permissions' => $this->getUserPermissions($user),
-            'profile_complete' => $this->profileService->hasCompleteProfile($user),
+
             'contextual_id' => $this->roleService->getContextualId($user),
             'display_role' => $this->roleService->getDisplayRole($user),
         ]);
@@ -46,7 +46,7 @@ class UserController extends Controller
 
         return response()->json([
             'user' => $user,
-            'profile_complete' => $this->profileService->hasCompleteProfile($user),
+
             'message' => 'Profile updated successfully'
         ]);
     }
